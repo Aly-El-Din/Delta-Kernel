@@ -22,11 +22,8 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
-
 
 public class Main {
-    public static AtomicLong writeTime = new AtomicLong(0);
     public static Object getColumnValue(ColumnVector column, int rowIndex) {
         if (column.isNullAt(rowIndex)) {
             return null;
@@ -47,25 +44,14 @@ public class Main {
         } else if (dataType instanceof BooleanType) {
             return column.getBoolean(rowIndex);
         }else if (dataType instanceof TimestampType) {
-            // microseconds since epoch -> convert to Instant
             long micros = column.getLong(rowIndex);
             Instant instant = Instant.ofEpochSecond(
                     micros / 1_000_000,
                     (micros % 1_000_000) * 1000
             );
-
-            // Use system default zone offset (or ZoneOffset.of("+03:00") if you want fixed)
+            //System default zone offset
             return DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
-                    .withZone(ZoneOffset.systemDefault())  // <--- adjust here
-                    .format(instant);
-        } else if (dataType instanceof TimestampType) {
-            long micros = column.getLong(rowIndex);
-            Instant instant = Instant.ofEpochSecond(
-                    micros / 1_000_000,
-                    (micros % 1_000_000) * 1000
-            );
-            return DateTimeFormatter.ISO_OFFSET_DATE_TIME
-                    .withZone(ZoneOffset.UTC)
+                    .withZone(ZoneOffset.systemDefault())
                     .format(instant);
         } else if (dataType instanceof DateType) {
             int days = column.getInt(rowIndex);
@@ -74,51 +60,6 @@ public class Main {
             return date.format(formatter);
         }
         return column.toString();
-    }
-
-    public static StringBuilder getColumnNames(Snapshot snapshot, Engine engine){
-        StructType schema = snapshot.getSchema(engine);
-        List<StructField> cols = schema.fields();
-        StringBuilder colNames = new StringBuilder();
-        for(int i=0;i<cols.size();i++){
-            colNames.append(cols.get(i).getName());
-            if(i!=cols.size()-1){
-                colNames.append(",");
-            }
-        }
-        return colNames;
-    }
-
-    public static void mergeCsvFiles(List<String> csvFilePaths, String outputFilePath) throws IOException {
-        PrintWriter mergedWriter = null;
-        try {
-            mergedWriter = new PrintWriter(new BufferedWriter(new FileWriter(outputFilePath, false)));
-
-            for (String csvFilePath : csvFilePaths) {
-                try (BufferedReader reader = new BufferedReader(new FileReader(csvFilePath))) {
-                    String line;
-                    String prevLine = null;
-                    while ((line = reader.readLine()) != null) {
-                        // Skip empty lines
-                        if (line.trim().isEmpty()) {
-                            continue;
-                        }
-
-                        if(prevLine!=null){
-                            mergedWriter.println(prevLine);
-                        }
-                        prevLine = line;
-                    }
-                } catch (IOException e) {
-                    System.err.println("Error reading file: " + csvFilePath + " - " + e.getMessage());
-                    // Continue with other files
-                }
-            }
-        } finally {
-            if (mergedWriter != null) {
-                mergedWriter.close();
-            }
-        }
     }
 
     public static List<PhysicalWrapperObject> getLogicalDataAttributes(CloseableIterator<FilteredColumnarBatch> scanFiles,
@@ -158,12 +99,6 @@ public class Main {
         Configuration hadoopConfig = new Configuration();
         Engine engine = DefaultEngine.create(hadoopConfig);
         String tablePath = args[0];
-        //String outputDir = args[1];*/
-
-        //String tablePath = "C:\\Users\\Cyber\\Desktop\\deltalake_project\\Delta-Lake-Mini-Project\\delta-table-test_table_7";
-        //String outputDir = "C:\\Users\\Cyber\\Downloads\\memory_7";
-
-        long csvWriterInitTime = 0;
 
         //1.Table initialization
         try{
@@ -174,9 +109,6 @@ public class Main {
             //2.snapshot creation
             Snapshot snapshot = table.getLatestSnapshot(engine);
 
-            //Configuring csv writer with column names
-            //StringBuilder colNames = getColumnNames(snapshot, engine);
-
             //3.Scan planning
             try {
                 ScanBuilder scanBuilder = snapshot.getScanBuilder(engine);
@@ -184,43 +116,12 @@ public class Main {
                 System.out.println("Scanner created");
                 Row scantStateRow = scan.getScanState(engine);
                 CloseableIterator<FilteredColumnarBatch> scanFiles = scan.getScanFiles(engine);
-
                 List<PhysicalWrapperObject> globalLogicalDataAtt = getLogicalDataAttributes(scanFiles, engine, scantStateRow);
 
-                /*
-                long headerCsvStart = System.nanoTime();
-                //Making csv file paths
-                List<String> csvFilePaths = new ArrayList<>();
-                String headerPath = outputDir + "/test_table.csv";
-                //Write column names
-                //TODO:Check the existence of header
-                PrintWriter headerWriter = new PrintWriter(new BufferedWriter(
-                        new FileWriter(headerPath, false)));
-                headerWriter.println(colNames);
-                headerWriter.println(colNames);
-                headerWriter.close();
-                csvFilePaths.add(headerPath);
-                long headerCsvEnd = System.nanoTime();
-                csvWriterInitTime += (headerCsvEnd - headerCsvStart);
-                */
-
-                //Start writing the main csv file
                 List<Thread> threads = new ArrayList<>();
                 //int threadIndex = 1;
                 for(PhysicalWrapperObject obj:globalLogicalDataAtt){
                     try {
-
-                        /*
-                        long csvWriterStart = System.nanoTime();
-                        //create file writer
-                        String fileName = outputDir + "/test_table" + threadIndex + ".csv";
-                        csvFilePaths.add(fileName);
-                        PrintWriter csvWriter = new PrintWriter(new BufferedWriter(
-                                new FileWriter(fileName, false) // overwrite
-                        ));
-                        long csvWriterEnd = System.nanoTime();
-                        csvWriterInitTime+=(csvWriterEnd - csvWriterStart);
-                         */
                         Thread t = new Actor3(obj, engine, scantStateRow/*, csvWriter*/);
                         threads.add(t);
                         t.start();
@@ -231,6 +132,7 @@ public class Main {
                 }
 
                 //Wait for threads to complete
+                //TODO: Specify number of threads dynamically
                 for(Thread t:threads) {
                     try{
                         t.join();
@@ -241,20 +143,10 @@ public class Main {
                     }
                 }
                 long multiThreadEndTime = System.nanoTime();
+                long elapsedTime = (multiThreadEndTime - multiThreadStartTime) / 1_000_000;
 
-                long elapsedTime = (multiThreadEndTime - multiThreadStartTime);
-                /*System.out.println("Actor 3 init time: "+csvWriterInitTime);
-                elapsedTime -= csvWriterInitTime;*/
-                elapsedTime = elapsedTime / 1_000_000;
-                System.out.println("Actor 3 reading Time: "+elapsedTime);
-
-                //Merging CSV file
-                /*try{
-                    mergeCsvFiles(csvFilePaths,outputDir+"/actor3_final_output.csv");
-                } catch (IOException e){
-                    System.err.println("Error merging CSV files: " + e.getMessage());
-                    e.printStackTrace();
-                }*/
+                System.out.println("Number of executed threads: "+threads.size());
+                System.out.println("Actor-3 reading time: " + elapsedTime);
             }
             catch (Exception e) {
                 System.err.println("Error creating scanner");
