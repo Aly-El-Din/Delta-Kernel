@@ -24,6 +24,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 public class Main {
+    public static String outputDirectoryPath;
     public static Object getColumnValue(ColumnVector column, int rowIndex) {
         if (column.isNullAt(rowIndex)) {
             return null;
@@ -98,7 +99,12 @@ public class Main {
 
         Configuration hadoopConfig = new Configuration();
         Engine engine = DefaultEngine.create(hadoopConfig);
+
         String tablePath = args[0];
+        outputDirectoryPath = args[1];
+
+        //String tablePath = "C:\\Users\\Cyber\\Desktop\\deltalake_project\\Delta-Lake-Mini-Project\\delta-table-test_table_7";
+        //outputDirectoryPath = "C:\\Users\\Cyber\\Downloads\\HadoopParquetMemory";
 
         //1.Table initialization
         try{
@@ -119,13 +125,13 @@ public class Main {
                 List<PhysicalWrapperObject> globalLogicalDataAtt = getLogicalDataAttributes(scanFiles, engine, scantStateRow);
 
                 List<Thread> threads = new ArrayList<>();
-                //int threadIndex = 1;
+                int threadIndex = 1;
                 for(PhysicalWrapperObject obj:globalLogicalDataAtt){
                     try {
-                        Thread t = new Actor3(obj, engine, scantStateRow/*, csvWriter*/);
+                        Thread t = new Actor3(obj, engine, scantStateRow, threadIndex);
                         threads.add(t);
                         t.start();
-                        //threadIndex++;
+                        threadIndex++;
                     } catch (Exception e) {
                         System.out.println("Error===>"+e);
                     }
@@ -144,6 +150,8 @@ public class Main {
                 }
                 long multiThreadEndTime = System.nanoTime();
                 long elapsedTime = (multiThreadEndTime - multiThreadStartTime) / 1_000_000;
+
+
 
                 System.out.println("Number of executed threads: "+threads.size());
                 System.out.println("Actor-3 reading time: " + elapsedTime);

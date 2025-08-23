@@ -8,6 +8,8 @@ import io.delta.kernel.data.Row;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.utils.CloseableIterator;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import static org.example.Main.*;
@@ -16,11 +18,13 @@ public class Actor3 extends Thread {
     private final PhysicalWrapperObject globalPhysicalDataItr;
     private final Engine engine;
     private final Row scanStateRow;
+    private final int threadId;
 
-    public Actor3(PhysicalWrapperObject globalPhysicalDataItr, Engine engine, Row scanStateRow /*, PrintWriter csvWriter*/) {
+    public Actor3(PhysicalWrapperObject globalPhysicalDataItr, Engine engine, Row scanStateRow, int threadId) {
         this.globalPhysicalDataItr = globalPhysicalDataItr;
         this.engine = engine;
         this.scanStateRow = scanStateRow;
+        this.threadId = threadId;
     }
     public void run(){
         try{
@@ -30,17 +34,29 @@ public class Actor3 extends Thread {
                             globalPhysicalDataItr.getScanFileRow(),
                             globalPhysicalDataItr.getPhysicalDataIter()
                     );
+
             if (transformedData.hasNext()){
-                FilteredColumnarBatch logicalData = transformedData.next();
-                ColumnarBatch dataBatch = logicalData.getData(); //Returns unfiltered cols
-                Optional<ColumnVector> selectionVector = logicalData.getSelectionVector();
+
+                List<FilteredColumnarBatch> allBatches = new ArrayList<>();
+                while (transformedData.hasNext()) {
+                    allBatches.add(transformedData.next());
+                }
+                FilteredColumnarBatch firstBatch = allBatches.get(0);
+                // Extract metadata from first batch
+                ColumnarBatch dataBatch = firstBatch.getData();
+                Optional<ColumnVector> selectionVector = firstBatch.getSelectionVector();
+
                 int numCols = dataBatch.getSchema().length();
                 int numRows = dataBatch.getSize();
-
                 boolean dvExist = selectionVector.isPresent();
 
+                // Write parquet files
+                Actor3ParquetWriter parquetWriter = new Actor3ParquetWriter(dataBatch.getSchema(), threadId);
+
+                parquetWriter.writeParquet(allBatches);
+
                 boolean rowSelected;
-                for(int rowIndex = 0; rowIndex < numRows; rowIndex++){
+                for(int rowIndex = 0; rowIndex < numRows; rowIndex++) {
                     rowSelected = true;
                     if(dvExist){
                         rowSelected = (!selectionVector.get().isNullAt(rowIndex) &&
@@ -49,7 +65,6 @@ public class Actor3 extends Thread {
                    if(rowSelected) {
                         for(int colIdx = 0; colIdx<numCols; colIdx++){
                             ColumnVector columnVector = dataBatch.getColumnVector(colIdx);
-                            getColumnValue(columnVector, rowIndex);
                         }
                    }
                 }
