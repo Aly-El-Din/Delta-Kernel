@@ -22,11 +22,8 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
-
 
 public class Main {
-    public static AtomicLong writeTime = new AtomicLong(0);
     public static Object getColumnValue(ColumnVector column, int rowIndex) {
         if (column.isNullAt(rowIndex)) {
             return null;
@@ -150,18 +147,16 @@ public class Main {
     public static void main(String[] args) {
 
         //Get args
-       /* if(args.length < 2){
+        if(args.length < 2){
             System.out.println("Usage: java -jar MyApp.jar <tablePath> <outputDir>");
             System.exit(1);
-        }*/
+        }
 
         Configuration hadoopConfig = new Configuration();
         Engine engine = DefaultEngine.create(hadoopConfig);
         String tablePath = args[0];
-        //String outputDir = args[1];*/
+        String outputDir = args[1];
 
-        //String tablePath = "C:\\Users\\Cyber\\Desktop\\deltalake_project\\Delta-Lake-Mini-Project\\delta-table-test_table_7";
-        //String outputDir = "C:\\Users\\Cyber\\Downloads\\memory_7";
 
         long csvWriterInitTime = 0;
 
@@ -175,7 +170,7 @@ public class Main {
             Snapshot snapshot = table.getLatestSnapshot(engine);
 
             //Configuring csv writer with column names
-            //StringBuilder colNames = getColumnNames(snapshot, engine);
+            StringBuilder colNames = getColumnNames(snapshot, engine);
 
             //3.Scan planning
             try {
@@ -187,7 +182,7 @@ public class Main {
 
                 List<PhysicalWrapperObject> globalLogicalDataAtt = getLogicalDataAttributes(scanFiles, engine, scantStateRow);
 
-                /*
+
                 long headerCsvStart = System.nanoTime();
                 //Making csv file paths
                 List<String> csvFilePaths = new ArrayList<>();
@@ -202,15 +197,13 @@ public class Main {
                 csvFilePaths.add(headerPath);
                 long headerCsvEnd = System.nanoTime();
                 csvWriterInitTime += (headerCsvEnd - headerCsvStart);
-                */
+
 
                 //Start writing the main csv file
                 List<Thread> threads = new ArrayList<>();
-                //int threadIndex = 1;
+                int threadIndex = 1;
                 for(PhysicalWrapperObject obj:globalLogicalDataAtt){
                     try {
-
-                        /*
                         long csvWriterStart = System.nanoTime();
                         //create file writer
                         String fileName = outputDir + "/test_table" + threadIndex + ".csv";
@@ -220,11 +213,11 @@ public class Main {
                         ));
                         long csvWriterEnd = System.nanoTime();
                         csvWriterInitTime+=(csvWriterEnd - csvWriterStart);
-                         */
-                        Thread t = new Actor3(obj, engine, scantStateRow/*, csvWriter*/);
+
+                        Thread t = new Actor3(obj, engine, scantStateRow, csvWriter);
                         threads.add(t);
                         t.start();
-                        //threadIndex++;
+                        threadIndex++;
                     } catch (Exception e) {
                         System.out.println("Error===>"+e);
                     }
@@ -243,18 +236,18 @@ public class Main {
                 long multiThreadEndTime = System.nanoTime();
 
                 long elapsedTime = (multiThreadEndTime - multiThreadStartTime);
-                /*System.out.println("Actor 3 init time: "+csvWriterInitTime);
-                elapsedTime -= csvWriterInitTime;*/
+                System.out.println("Actor 3 init time: "+csvWriterInitTime);
+                elapsedTime -= csvWriterInitTime;
                 elapsedTime = elapsedTime / 1_000_000;
                 System.out.println("Actor 3 reading Time: "+elapsedTime);
 
                 //Merging CSV file
-                /*try{
+                try{
                     mergeCsvFiles(csvFilePaths,outputDir+"/actor3_final_output.csv");
                 } catch (IOException e){
                     System.err.println("Error merging CSV files: " + e.getMessage());
                     e.printStackTrace();
-                }*/
+                }
             }
             catch (Exception e) {
                 System.err.println("Error creating scanner");
