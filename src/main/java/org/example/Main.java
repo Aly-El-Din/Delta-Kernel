@@ -25,6 +25,17 @@ import java.util.*;
 
 
 public class Main {
+    private static StringBuilder getTableName(String tablePath) {
+        int pathLength = tablePath.length();
+        int idx = pathLength-1;
+        StringBuilder tableName = new StringBuilder();
+        while(idx>=0 && tablePath.charAt(idx)!='\\'){
+            tableName.append(tablePath.charAt(idx));
+            idx--;
+        }
+        tableName.reverse();
+        return tableName;
+    }
     public static Object getColumnValue(ColumnVector column, int rowIndex) {
         if (column.isNullAt(rowIndex)) {
             return null;
@@ -106,12 +117,12 @@ public class Main {
             System.out.println("Usage: java -jar MyApp.jar <tablePath> <outputLogTxtFile>");
             System.exit(1);
         }
-
         Configuration hadoopConfig = new Configuration();
         Engine engine = DefaultEngine.create(hadoopConfig);
         String tablePath = args[0];
         String outputLogFilePath = args[1];
-
+        /*String tablePath = "C:\\Users\\Cyber\\Downloads\\smallTable_5000_10_50";
+        String outputLogFilePath = "C:\\Users\\Cyber\\Downloads\\logFile.txt";*/
         //1.Table initialization
         try{
             long multiThreadStartTime = System.nanoTime();
@@ -156,7 +167,9 @@ public class Main {
 
                 long elapsedTime = (multiThreadEndTime - multiThreadStartTime) / 1_000_000;
                 FileWriter fileWriter = new FileWriter(outputLogFilePath, true);
-                fileWriter.write("ACTOR 3 READS | "+tablePath+" | IN "+elapsedTime+" SECONDS");
+                fileWriter.write("\n");
+                fileWriter.write("ACTOR 3 READS | "+getTableName(tablePath)+" | IN "+elapsedTime+" SECONDS");
+                fileWriter.close();
                 System.out.println("Actor 3 reading Time: "+elapsedTime);
             }
             catch (Exception e) {
