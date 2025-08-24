@@ -1,6 +1,5 @@
 package org.example;
 import io.delta.kernel.*;
-import io.delta.kernel.data.ColumnVector;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
@@ -16,52 +15,10 @@ import org.apache.hadoop.conf.Configuration;
 import static io.delta.kernel.internal.util.Utils.singletonCloseableIterator;
 
 import java.io.*;
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 public class Main {
     public static String outputDirectoryPath;
-    public static Object getColumnValue(ColumnVector column, int rowIndex) {
-        if (column.isNullAt(rowIndex)) {
-            return null;
-        }
-        DataType dataType = column.getDataType();
-
-        if (dataType instanceof StringType) {
-            return column.getString(rowIndex);
-        } else if (dataType instanceof IntegerType) {
-            return column.getInt(rowIndex);
-        } else if (dataType instanceof LongType) {
-            return column.getLong(rowIndex);
-        } else if (dataType instanceof DoubleType) {
-            return column.getDouble(rowIndex);
-        } else if(dataType instanceof DecimalType) {
-            BigDecimal decimalValue = column.getDecimal(rowIndex);
-            return decimalValue.doubleValue();
-        } else if (dataType instanceof BooleanType) {
-            return column.getBoolean(rowIndex);
-        }else if (dataType instanceof TimestampType) {
-            long micros = column.getLong(rowIndex);
-            Instant instant = Instant.ofEpochSecond(
-                    micros / 1_000_000,
-                    (micros % 1_000_000) * 1000
-            );
-            //System default zone offset
-            return DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
-                    .withZone(ZoneOffset.systemDefault())
-                    .format(instant);
-        } else if (dataType instanceof DateType) {
-            int days = column.getInt(rowIndex);
-            LocalDate date = LocalDate.ofEpochDay(days);
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("M/d/yyyy");
-            return date.format(formatter);
-        }
-        return column.toString();
-    }
 
     public static List<PhysicalWrapperObject> getLogicalDataAttributes(CloseableIterator<FilteredColumnarBatch> scanFiles,
                                                                        Engine engine, Row scantStateRow) throws IOException {
@@ -92,19 +49,16 @@ public class Main {
     public static void main(String[] args) {
 
         //Get args
-       /* if(args.length < 2){
+       if(args.length < 2){
             System.out.println("Usage: java -jar MyApp.jar <tablePath> <outputDir>");
             System.exit(1);
-        }*/
+        }
 
         Configuration hadoopConfig = new Configuration();
         Engine engine = DefaultEngine.create(hadoopConfig);
 
         String tablePath = args[0];
         outputDirectoryPath = args[1];
-
-        //String tablePath = "C:\\Users\\Cyber\\Desktop\\deltalake_project\\Delta-Lake-Mini-Project\\delta-table-test_table_7";
-        //outputDirectoryPath = "C:\\Users\\Cyber\\Downloads\\HadoopParquetMemory";
 
         //1.Table initialization
         try{

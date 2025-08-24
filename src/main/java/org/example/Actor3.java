@@ -12,8 +12,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-import static org.example.Main.*;
-
 public class Actor3 extends Thread {
     private final PhysicalWrapperObject globalPhysicalDataItr;
     private final Engine engine;
@@ -64,7 +62,7 @@ public class Actor3 extends Thread {
                     }
                    if(rowSelected) {
                         for(int colIdx = 0; colIdx<numCols; colIdx++){
-                            ColumnVector columnVector = dataBatch.getColumnVector(colIdx);
+                            dataBatch.getColumnVector(colIdx);
                         }
                    }
                 }
