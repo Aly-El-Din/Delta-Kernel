@@ -34,11 +34,8 @@ public class Actor3 extends Thread {
                     );
 
             if (transformedData.hasNext()){
-
                 List<FilteredColumnarBatch> allBatches = new ArrayList<>();
-                while (transformedData.hasNext()) {
-                    allBatches.add(transformedData.next());
-                }
+                allBatches.add(transformedData.next());
                 FilteredColumnarBatch firstBatch = allBatches.get(0);
                 // Extract metadata from first batch
                 ColumnarBatch dataBatch = firstBatch.getData();
