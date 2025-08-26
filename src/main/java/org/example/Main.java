@@ -121,8 +121,6 @@ public class Main {
         Engine engine = DefaultEngine.create(hadoopConfig);
         String tablePath = args[0];
         String outputLogFilePath = args[1];
-        /*String tablePath = "C:\\Users\\Cyber\\Downloads\\smallTable_5000_10_50";
-        String outputLogFilePath = "C:\\Users\\Cyber\\Downloads\\logFile.txt";*/
         //1.Table initialization
         try{
             long multiThreadStartTime = System.nanoTime();
@@ -137,19 +135,21 @@ public class Main {
                 ScanBuilder scanBuilder = snapshot.getScanBuilder(engine);
                 Scan scan = scanBuilder.build();
                 System.out.println("Scanner created");
+                //scanStateRow -> snapshot-wide metadata && info for transforming physical schema to logical schema
                 Row scantStateRow = scan.getScanState(engine);
+                //scanFiles iterator -> file-inventory having parquet files data to be read (path, size, dv, stats, physical schema)
                 CloseableIterator<FilteredColumnarBatch> scanFiles = scan.getScanFiles(engine);
-
+                //Collecting physical data iter (columnar batches) with its corresponding scan file row
                 List<PhysicalWrapperObject> globalLogicalDataAtt = getLogicalDataAttributes(scanFiles, engine, scantStateRow);
 
                 List<Thread> threads = new ArrayList<>();
                 for(PhysicalWrapperObject obj:globalLogicalDataAtt){
                     try {
-                        Thread t = new Actor3(obj, engine, scantStateRow/*, csvWriter*/);
+                        Thread t = new Actor3(obj, engine, scantStateRow);
                         threads.add(t);
                         t.start();
                     } catch (Exception e) {
-                        System.out.println("Error===>"+e);
+                        System.out.println("Error while executing thread ===> "+e);
                     }
                 }
 
