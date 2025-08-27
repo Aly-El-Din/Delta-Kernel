@@ -62,7 +62,6 @@ public class Main {
 
         //1.Table initialization
         try{
-            long multiThreadStartTime = System.nanoTime();
             Table table = Table.forPath(engine, tablePath);
             System.out.println("Delta table initialized=> Table class: "+table.getClass().getSimpleName());
 
@@ -102,13 +101,7 @@ public class Main {
                         Thread.currentThread().interrupt();
                     }
                 }
-                long multiThreadEndTime = System.nanoTime();
-                long elapsedTime = (multiThreadEndTime - multiThreadStartTime) / 1_000_000;
-
-
-
                 System.out.println("Number of executed threads: "+threads.size());
-                System.out.println("Actor-3 reading time: " + elapsedTime);
             }
             catch (Exception e) {
                 System.err.println("Error creating scanner");
