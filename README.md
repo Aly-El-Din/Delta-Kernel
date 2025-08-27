@@ -45,7 +45,7 @@ Writing delta table using ACTOR3:
   java -Xmx<size>g -cp <jar_name.jar> <main_file.Main> <delta_table_dir_path>
 
 Reading delta table using spark:
-  spark-submit --packages io.delta:delta-spark_2.13:4.0.0 <script.py> <logfile_path>
+  spark-submit --master local[4]  --driver-memory 4G --executor-memory 8G --executor-cores 4  --packages io.delta:delta-spark_2.13:4.0.0 --conf "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension" --conf "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog" <script.py> <table_path> <logfile.txt>
 
 writing delta table using spark:
     spark-submit --packages io.delta:delta-spark_2.13:4.0.0 <script.py> <output_dir_path>
