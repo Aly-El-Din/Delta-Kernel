@@ -17,6 +17,7 @@ import java.util.*;
 public class Main {
     public static Configuration hadoopConfig;
     public static String tablePath;
+    public static final String outputDirectoryPath = "C:\\Users\\Cyber\\Downloads\\optimizer_1";
     public static List<WrapperObject> getFilesStatuses(CloseableIterator<FilteredColumnarBatch> scanFiles) throws IOException {
 
         List<WrapperObject> objects = new ArrayList<>();
@@ -62,7 +63,7 @@ public class Main {
         }*/
         hadoopConfig = new Configuration();
         Engine engine = DefaultEngine.create(hadoopConfig);
-        tablePath = "C:\\Users\\Cyber\\Downloads\\smallTable_5000_10_50";
+        tablePath = "C:\\Users\\Cyber\\Downloads\\smallTable_dv_5000_10_50";
         //1.Table initialization
         try{
             Table table = Table.forPath(engine, tablePath);
@@ -86,15 +87,6 @@ public class Main {
                 List<WrapperObject> fileStatusesAndScanFilesRows = getFilesStatuses(scanFiles);
                 System.out.println("Files statuses are collected!\n");
                 readParquetFilesInMemory(fileStatusesAndScanFilesRows, engine,scantStateRow);
-
-                /*
-                long elapsedTime = (multiThreadEndTime - multiThreadStartTime) / 1_000_000;
-                FileWriter fileWriter = new FileWriter(outputLogFilePath, true);
-                fileWriter.write("\n");
-                fileWriter.write("ACTOR 3 READS | "+getTableName(tablePath)+" | IN "+elapsedTime+"Milli SECONDS");
-                fileWriter.close();
-                System.out.println("Actor 3 reading Time: "+elapsedTime);
-                */
             }
             catch (Exception e) {
                 System.err.println("Error creating scanner");
