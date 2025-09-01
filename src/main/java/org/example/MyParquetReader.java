@@ -1,20 +1,18 @@
 package org.example;
 
-import io.delta.kernel.data.ColumnVector;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.defaults.internal.parquet.ParquetFileReader;
+import io.delta.kernel.engine.Engine;
 import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
+import io.delta.kernel.internal.deletionvectors.DeletionVectorUtils;
+import io.delta.kernel.internal.deletionvectors.RoaringBitmapArray;
 import io.delta.kernel.internal.util.Utils;
-import io.delta.kernel.types.DataType;
 import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
-import io.delta.kernel.utils.CloseableIterator;
-import io.delta.kernel.utils.FileStatus;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.parquet.example.data.Group;
 import org.apache.parquet.filter2.predicate.FilterPredicate;
 import org.apache.parquet.hadoop.ParquetRecordReaderWrapper;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
@@ -84,7 +82,10 @@ public class MyParquetReader {
         }
     }
     public void readParquetFile(
-        String path
+        String path,
+        Engine engine,
+        Row scanFile,
+        String tablePath
     ) throws IOException, InterruptedException {
         readSupport = new ParquetFileReader.BatchReadSupport(maxBatchSize, physicalSchema);
 
@@ -92,34 +93,42 @@ public class MyParquetReader {
                 physicalSchema.indexOf(StructField.METADATA_ROW_INDEX_COLUMN_NAME) >= 0 &&
                         physicalSchema.get(StructField.METADATA_ROW_INDEX_COLUMN_NAME).isMetadataColumn();
 
-        List<Object> rows = new ArrayList<>();
+        System.out.println("Has row index column?: "+hasRowIndexCol);
+        List<Object> memory = new ArrayList<>();
 
         checkNextElementConsumed(path);
 
         if (!hasNotConsumedNextElement) {
             throw new NoSuchElementException();
         }
-        int batchSize = 0;
-        do {
-            hasNotConsumedNextElement = false;
-            // hasNext reads to row to confirm there is a next element.
-            // get the row index only if required by the read schema
-            long rowIndex = hasRowIndexCol ? reader.getCurrentRowIndex() : -1;
-            Object row = reader.getCurrentValue();
-            //System.out.println("Row: "+row);
-            rows.add(row);
-            /*if(rowIndex != -1){
+
+        DeletionVectorDescriptor dv =
+                InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFile);
+        if(dv == null){
+            do {
+                hasNotConsumedNextElement = false;
                 Object row = reader.getCurrentValue();
-                System.out.println("Row: "+row);
+                memory.add(row);
+            } while (checkNextElementConsumed(path));
+        }
+        else{
+            if (!hasRowIndexCol) {
+                throw new IllegalArgumentException("Row index column is not " +
+                        "present in the data read from the Parquet file.");
+            }
+            RoaringBitmapArray actualDeletionVector = DeletionVectorUtils.loadNewDvAndBitmap(engine, tablePath, dv)._2;
+            do {
+                hasNotConsumedNextElement = false;
+                boolean rowDeleted = actualDeletionVector.contains(reader.getCurrentRowIndex());
+                if(!rowDeleted){
+                    Object row = reader.getCurrentValue();
+                    memory.add(row);
+                }
+            } while (checkNextElementConsumed(path));
+        }
 
-                rows.add(row);
-            }*/
-            batchSize++;
-        } while (batchSize < maxBatchSize && checkNextElementConsumed(path));
-        System.out.println("Batch rows:");
-        int c = 0;
 
-        System.out.println("number of rows read: "+rows.size());
+        System.out.println("number of rows read: "+memory.size());
     }
     private void initParquetReaderIfRequired(String path) {
         if (reader == null) {

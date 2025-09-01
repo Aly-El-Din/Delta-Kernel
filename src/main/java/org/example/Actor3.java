@@ -16,11 +16,13 @@ public class Actor3 extends Thread {
     private FileStatus fileStatus;
     private final Engine engine;
     private final Row scanStateRow;
-    Optional<Predicate> predicate;
-    public Actor3(FileStatus fileStatus, Engine engine, Row scanStateRow, Optional<Predicate> predicate) {
+    private final Row scanFile;
+    private Optional<Predicate> predicate;
+    public Actor3(FileStatus fileStatus, Engine engine, Row scanStateRow, Row scanFile, Optional<Predicate> predicate) {
         this.fileStatus = fileStatus;
         this.engine = engine;
         this.scanStateRow = scanStateRow;
+        this.scanFile = scanFile;
         this.predicate = predicate;
     }
 
@@ -44,7 +46,7 @@ public class Actor3 extends Thread {
         if(fileStatus!=null){
             String filePath = fileStatus.getPath();
             try {
-                parquetReader.readParquetFile(filePath);
+                parquetReader.readParquetFile(filePath, engine, scanFile,Main.tablePath);
             }
             catch (IOException e) {
                 throw new RuntimeException(e);

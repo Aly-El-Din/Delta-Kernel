@@ -1,94 +1,25 @@
 package org.example;
 import io.delta.kernel.*;
-import io.delta.kernel.data.ColumnVector;
-import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.defaults.engine.DefaultEngine;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.exceptions.TableNotFoundException;
 import io.delta.kernel.internal.InternalScanFileUtils;
-import io.delta.kernel.internal.data.ScanStateRow;
-import io.delta.kernel.types.*;
 import io.delta.kernel.utils.CloseableIterator;
 import io.delta.kernel.utils.FileStatus;
 import org.apache.hadoop.conf.Configuration;
-import static io.delta.kernel.internal.util.Utils.singletonCloseableIterator;
 
 import java.io.*;
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 
 public class Main {
     public static Configuration hadoopConfig;
-    private static StringBuilder getTableName(String tablePath) {
-        int pathLength = tablePath.length();
-        int idx = pathLength-1;
-        StringBuilder tableName = new StringBuilder();
-        while(idx>=0 && tablePath.charAt(idx)!='\\'){
-            tableName.append(tablePath.charAt(idx));
-            idx--;
-        }
-        tableName.reverse();
-        return tableName;
-    }
-    public static Object getColumnValue(ColumnVector column, int rowIndex) {
-        if (column.isNullAt(rowIndex)) {
-            return null;
-        }
-        DataType dataType = column.getDataType();
+    public static String tablePath;
+    public static List<WrapperObject> getFilesStatuses(CloseableIterator<FilteredColumnarBatch> scanFiles) throws IOException {
 
-        if (dataType instanceof StringType) {
-            return column.getString(rowIndex);
-        } else if (dataType instanceof IntegerType) {
-            return column.getInt(rowIndex);
-        } else if (dataType instanceof LongType) {
-            return column.getLong(rowIndex);
-        } else if (dataType instanceof DoubleType) {
-            return column.getDouble(rowIndex);
-        } else if(dataType instanceof DecimalType) {
-            BigDecimal decimalValue = column.getDecimal(rowIndex);
-            return decimalValue.doubleValue();
-        } else if (dataType instanceof BooleanType) {
-            return column.getBoolean(rowIndex);
-        }else if (dataType instanceof TimestampType) {
-            // microseconds since epoch -> convert to Instant
-            long micros = column.getLong(rowIndex);
-            Instant instant = Instant.ofEpochSecond(
-                    micros / 1_000_000,
-                    (micros % 1_000_000) * 1000
-            );
-
-            // Use system default zone offset (or ZoneOffset.of("+03:00") if you want fixed)
-            return DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
-                    .withZone(ZoneOffset.systemDefault())  // <--- adjust here
-                    .format(instant);
-        } else if (dataType instanceof TimestampType) {
-            long micros = column.getLong(rowIndex);
-            Instant instant = Instant.ofEpochSecond(
-                    micros / 1_000_000,
-                    (micros % 1_000_000) * 1000
-            );
-            return DateTimeFormatter.ISO_OFFSET_DATE_TIME
-                    .withZone(ZoneOffset.UTC)
-                    .format(instant);
-        } else if (dataType instanceof DateType) {
-            int days = column.getInt(rowIndex);
-            LocalDate date = LocalDate.ofEpochDay(days);
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("M/d/yyyy");
-            return date.format(formatter);
-        }
-        return column.toString();
-    }
-    public static List<FileStatus> getFilesStatuses(CloseableIterator<FilteredColumnarBatch> scanFiles,
-                                                                       Engine engine, Row scantStateRow) throws IOException {
-
-        List<FileStatus>fileStatuses = new ArrayList<>();
+        List<WrapperObject> objects = new ArrayList<>();
 
         while (scanFiles.hasNext()) {
             FilteredColumnarBatch scanFileColumnarBatch = scanFiles.next();
@@ -99,16 +30,16 @@ public class Main {
                     Row scanFileRow = scanFileRows.next();
                     //extracting all needed info about file (path, size, time metadata)
                     FileStatus fileStatus = InternalScanFileUtils.getAddFileStatus(scanFileRow);
-                    fileStatuses.add(fileStatus);
+                    objects.add(new WrapperObject(scanFileRow, fileStatus));
                 }
             }
         }
-        return fileStatuses;
+        return objects;
     }
-    public static void readParquetFilesInMemory(List<FileStatus>fileStatuses, Engine engine, Row scanStateRow) {
+    public static void readParquetFilesInMemory(List<WrapperObject> statusesAndScanFiles, Engine engine, Row scanStateRow) {
         List<Thread> threads = new ArrayList<>();
-        for(FileStatus fs:fileStatuses){
-            Thread fileReader = new Actor3(fs,engine,scanStateRow,Optional.empty());
+        for(WrapperObject obj:statusesAndScanFiles){
+            Thread fileReader = new Actor3(obj.getFileStatus(),engine,scanStateRow, obj.getScanFileRow(),Optional.empty());
             threads.add(fileReader);
             fileReader.start();
         }
@@ -131,7 +62,7 @@ public class Main {
         }*/
         hadoopConfig = new Configuration();
         Engine engine = DefaultEngine.create(hadoopConfig);
-        String tablePath = "C:\\Users\\Cyber\\Downloads\\smallTable_5000_10_50";
+        tablePath = "C:\\Users\\Cyber\\Downloads\\smallTable_5000_10_50";
         //1.Table initialization
         try{
             Table table = Table.forPath(engine, tablePath);
@@ -152,16 +83,18 @@ public class Main {
                 CloseableIterator<FilteredColumnarBatch> scanFiles = scan.getScanFiles(engine);
                 //Collecting physical data iter (columnar batches) with its corresponding scan file row
                 //TODO: get physicalReadSchema and logicalReadSchema once.
-                List<FileStatus> fileStatuses = getFilesStatuses(scanFiles, engine, scantStateRow);
+                List<WrapperObject> fileStatusesAndScanFilesRows = getFilesStatuses(scanFiles);
                 System.out.println("Files statuses are collected!\n");
-                readParquetFilesInMemory(fileStatuses,engine, scantStateRow);
+                readParquetFilesInMemory(fileStatusesAndScanFilesRows, engine,scantStateRow);
 
-                /*long elapsedTime = (multiThreadEndTime - multiThreadStartTime) / 1_000_000;
+                /*
+                long elapsedTime = (multiThreadEndTime - multiThreadStartTime) / 1_000_000;
                 FileWriter fileWriter = new FileWriter(outputLogFilePath, true);
                 fileWriter.write("\n");
                 fileWriter.write("ACTOR 3 READS | "+getTableName(tablePath)+" | IN "+elapsedTime+"Milli SECONDS");
                 fileWriter.close();
-                System.out.println("Actor 3 reading Time: "+elapsedTime);*/
+                System.out.println("Actor 3 reading Time: "+elapsedTime);
+                */
             }
             catch (Exception e) {
                 System.err.println("Error creating scanner");
