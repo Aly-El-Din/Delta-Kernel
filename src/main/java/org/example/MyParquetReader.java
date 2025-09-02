@@ -8,27 +8,27 @@ import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
 import io.delta.kernel.internal.deletionvectors.DeletionVectorUtils;
 import io.delta.kernel.internal.deletionvectors.RoaringBitmapArray;
-import io.delta.kernel.internal.util.Utils;
 import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.parquet.filter2.predicate.FilterPredicate;
-import org.apache.parquet.hadoop.ParquetRecordReaderWrapper;
+import org.apache.parquet.hadoop.ParquetInputFormat;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
+import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.parquet.schema.MessageType;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.concurrent.*;
 
 import static io.delta.kernel.defaults.internal.parquet.ParquetFilterUtils.toParquetFilter;
 import static io.delta.kernel.internal.util.Preconditions.checkArgument;
-import static java.util.Objects.requireNonNull;
 import static org.apache.parquet.hadoop.ParquetInputFormat.*;
 import static org.apache.parquet.hadoop.ParquetInputFormat.COLUMN_INDEX_FILTERING_ENABLED;
 
@@ -36,10 +36,7 @@ public class MyParquetReader {
     private final Configuration hadoopConf;
     private final StructType physicalSchema;
     private final int maxBatchSize;
-    private boolean hasNotConsumedNextElement;
-    private ParquetRecordReaderWrapper<Object> reader;
     private Optional<Predicate> predicate;
-    private ParquetFileReader.BatchReadSupport readSupport;
     public MyParquetReader(Configuration hadoopConf, StructType physicalSchema, Optional<Predicate> predicate) {
         this.hadoopConf = hadoopConf;
         this.physicalSchema = physicalSchema;
@@ -48,149 +45,93 @@ public class MyParquetReader {
         checkArgument(maxBatchSize > 0, "invalid Parquet reader batch size: " + maxBatchSize);
         this.predicate = predicate;
     }
-    /*private Object extractValue(Group group, String fieldName, DataType dataType) {
-    }
-    private Row convertParquetGroupToRow(Group parquetGroup) {
-        Object[] values = new Object[physicalSchema.fields().size()];
-        for(int i=0; i<physicalSchema.length(); i++) {
-            StructField field = physicalSchema.fields().get(i);
-            String fieldName = field.getName();
-            DataType fieldType = field.getDataType();
-
-            if(parquetGroup.getFieldRepetitionCount(fieldName) > 0) {
-                values[i] =
-            }
-        }
-    }
-    private Row convertToRow(Object currentValue) {
-        if (currentValue instanceof Group) {
-
-        }
-    }*/
-    private boolean checkNextElementConsumed(String path){
-        initParquetReaderIfRequired(path);
-        try {
-            if (hasNotConsumedNextElement) {
-                return true;
-            }
-
-            hasNotConsumedNextElement = reader.nextKeyValue() &&
-                    reader.getCurrentValue() != null;
-            return hasNotConsumedNextElement;
-        } catch (IOException | InterruptedException ie) {
-            throw new RuntimeException(ie);
-        }
-    }
     public void readParquetFile(
         String path,
         Engine engine,
         Row scanFile,
         String tablePath
     ) throws IOException, InterruptedException {
-        readSupport = new ParquetFileReader.BatchReadSupport(maxBatchSize, physicalSchema);
 
         final boolean hasRowIndexCol =
                 physicalSchema.indexOf(StructField.METADATA_ROW_INDEX_COLUMN_NAME) >= 0 &&
                         physicalSchema.get(StructField.METADATA_ROW_INDEX_COLUMN_NAME).isMetadataColumn();
 
-        System.out.println("Has row index column?: "+hasRowIndexCol);
-        List<Object> memory = new ArrayList<>();
-
-        checkNextElementConsumed(path);
-
-        if (!hasNotConsumedNextElement) {
-            throw new NoSuchElementException();
-        }
-
         DeletionVectorDescriptor dv =
                 InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFile);
-        if(dv == null){
-            do {
-                hasNotConsumedNextElement = false;
-                Object row = reader.getCurrentValue();
-                memory.add(row);
-            } while (checkNextElementConsumed(path));
-        }
-        else{
+
+        RoaringBitmapArray deletionVector = null;
+
+        if(dv != null){
             if (!hasRowIndexCol) {
                 throw new IllegalArgumentException("Row index column is not " +
                         "present in the data read from the Parquet file.");
             }
-            RoaringBitmapArray actualDeletionVector = DeletionVectorUtils.loadNewDvAndBitmap(engine, tablePath, dv)._2;
-            do {
-                hasNotConsumedNextElement = false;
-                boolean rowDeleted = actualDeletionVector.contains(reader.getCurrentRowIndex());
-                if(!rowDeleted){
-                    Object row = reader.getCurrentValue();
-                    memory.add(row);
-                }
-            } while (checkNextElementConsumed(path));
+             deletionVector = DeletionVectorUtils.loadNewDvAndBitmap(engine, tablePath, dv)._2;
         }
 
+        // Setup Hadoop Job and ParquetInputFormat to get splits (row groups)
+        Job job = Job.getInstance(hadoopConf);
+        Configuration jobConf = job.getConfiguration();
 
-        System.out.println("number of rows read: "+memory.size());
-    }
-    private void initParquetReaderIfRequired(String path) {
-        if (reader == null) {
-            org.apache.parquet.hadoop.ParquetFileReader fileReader = null;
-            try {
-                Configuration confCopy = hadoopConf;
-                Path filePath = new Path(URI.create(path));
+        ParquetInputFormat.setReadSupportClass(job, ParquetFileReader.BatchReadSupport.class);
+        String schemaJson = physicalSchema.toJson();
+        jobConf.set("delta.kernel.default.parquet.read.schema", schemaJson);
 
-                // We need physical schema in order to construct a filter that can be
-                // pushed into the `parquet-mr` reader. For that reason read the footer
-                // in advance.
-                ParquetMetadata footer =
-                        org.apache.parquet.hadoop.ParquetFileReader.readFooter(
-                                confCopy,
-                                filePath);
+        FileInputFormat.addInputPath(job, new Path(URI.create(path)));
+        // Configure predicate pushdown if a predicate exists
+        configurePredicatePushdown(job, path);
 
-                MessageType parquetSchema = footer.getFileMetaData().getSchema();
-                Optional<FilterPredicate> parquetPredicate = predicate.flatMap(
-                        predicate -> toParquetFilter(parquetSchema, predicate));
+        ParquetInputFormat<Object> parquetInputFormat = new ParquetInputFormat<>();
+        List<InputSplit> splits = parquetInputFormat.getSplits(job);
+        int numThreads = Math.min(splits.size(), Runtime.getRuntime().availableProcessors());
+        if (numThreads <= 0) {
+            numThreads = 1;
+        }
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+        List<Future<List<Object>>> futures = new ArrayList<>();
+        System.out.println("Reading file " + path + " with " + splits.size() + " splits (row groups) using " + numThreads + " threads.");
 
-                if (parquetPredicate.isPresent()) {
-                    // clone the configuration to avoid modifying the original one
-                    confCopy = new Configuration(confCopy);
+        for (InputSplit split : splits) {
+            Callable<List<Object>> task = new ParquetSplitReaderTask(
+                    jobConf,
+                    split,
+                    deletionVector,
+                    hasRowIndexCol
+            );
+            futures.add(executor.submit(task));
+        }
 
-                    setFilterPredicate(confCopy, parquetPredicate.get());
-                    // Disable the record level filtering as the `parquet-mr` evaluates
-                    // the filter once the entire record has been materialized. Instead,
-                    // we use the predicate to prune the row groups which is more efficient.
-                    // In the future, we can consider using the record level filtering if a
-                    // native Parquet reader is implemented in Kernel default module.
-                    confCopy.set(RECORD_FILTERING_ENABLED, "false");
-                    confCopy.set(DICTIONARY_FILTERING_ENABLED, "false");
-                    confCopy.set(COLUMN_INDEX_FILTERING_ENABLED, "false");
-                }
-
-                // Pass the already read footer to the reader to avoid reading it again.
-                fileReader = new MyParquetReader.ParquetFileReaderWithFooter(filePath, confCopy, footer);
-                reader = new ParquetRecordReaderWrapper<>(readSupport);
-                reader.initialize(fileReader, confCopy);
-            } catch (IOException e) {
-                Utils.closeCloseablesSilently(fileReader, reader);
-                throw new UncheckedIOException(e);
+        List<Object> memory = new ArrayList<>();
+        try {
+            for (Future<List<Object>> future : futures) {
+                memory.addAll(future.get());
             }
+        } catch (InterruptedException | ExecutionException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Error reading Parquet file concurrently", e);
+        } finally {
+            executor.shutdown();
+        }
+        System.out.println("Thread: " + Thread.currentThread().getName() + " finished reading " + path + ". Total rows read: " + memory.size());
+    }
+
+    private void configurePredicatePushdown(Job job, String path) throws IOException {
+        Configuration conf = job.getConfiguration();
+        Path filePath = new Path(URI.create(path));
+
+        ParquetMetadata footer = org.apache.parquet.hadoop.ParquetFileReader.readFooter(conf, filePath);
+        MessageType parquetSchema = footer.getFileMetaData().getSchema();
+        Optional<FilterPredicate> parquetPredicate = predicate.flatMap(
+                p -> toParquetFilter(parquetSchema, p));
+
+        if (parquetPredicate.isPresent()) {
+            setFilterPredicate(conf, parquetPredicate.get());
+            conf.set(RECORD_FILTERING_ENABLED, "false");
+            conf.set(DICTIONARY_FILTERING_ENABLED, "false");
+            conf.set(COLUMN_INDEX_FILTERING_ENABLED, "false");
         }
     }
-    private static class ParquetFileReaderWithFooter
-            extends org.apache.parquet.hadoop.ParquetFileReader {
-        private final ParquetMetadata footer;
 
-        ParquetFileReaderWithFooter(
-                Path filePath,
-                Configuration configuration,
-                ParquetMetadata footer) throws IOException {
-            super(configuration, filePath, footer);
-            this.footer = requireNonNull(footer, "footer is null");
-        }
-
-        @Override
-        public ParquetMetadata getFooter() {
-            return footer;  // return the footer passed in the constructor
-        }
-    }
 }
 
 

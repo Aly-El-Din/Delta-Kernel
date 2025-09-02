@@ -30,18 +30,6 @@ public class Actor3 extends Thread {
         System.out.println("Thread: "+currentThread().getName() + "started");
         StructType physicalReadSchema =
                 ScanStateRow.getPhysicalDataReadSchema(engine, scanStateRow);
-        /*StructType logicalReadSchema =
-                ScanStateRow.getLogicalSchema(engine, scanStateRow);
-        try {
-            CloseableIterator<ColumnarBatch> physicalDataIter = engine.getParquetHandler().
-                    readParquetFiles(singletonCloseableIterator(fileStatus), physicalReadSchema, Optional.empty());
-            if(physicalDataIter.hasNext()){
-
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }*/
-
         MyParquetReader parquetReader = new MyParquetReader(hadoopConfig, physicalReadSchema, predicate);
         if(fileStatus!=null){
             String filePath = fileStatus.getPath();
