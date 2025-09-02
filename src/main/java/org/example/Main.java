@@ -62,7 +62,7 @@ public class Main {
         }*/
         hadoopConfig = new Configuration();
         Engine engine = DefaultEngine.create(hadoopConfig);
-        tablePath = "C:\\Users\\Cyber\\Downloads\\smallTable_5000_10_50";
+        tablePath = "C:\\Users\\Cyber\\Downloads\\smallTable_dv_5000_10_50";
         //1.Table initialization
         try{
             Table table = Table.forPath(engine, tablePath);
