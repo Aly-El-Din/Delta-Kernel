@@ -4,11 +4,19 @@ import io.delta.kernel.internal.deletionvectors.RoaringBitmapArray;
 import io.delta.kernel.types.StructType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.page.PageReadStore;
+import org.apache.parquet.example.data.Group;
+import org.apache.parquet.hadoop.ParquetEmptyBlockException;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.api.InitContext;
 import org.apache.parquet.hadoop.api.ReadSupport;
+import org.apache.parquet.hadoop.example.GroupReadSupport;
+import org.apache.parquet.hadoop.metadata.BlockMetaData;
+import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
+import org.apache.parquet.hadoop.metadata.ColumnPath;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
+import org.apache.parquet.hadoop.util.counters.BenchmarkCounter;
 import org.apache.parquet.io.ColumnIOFactory;
 import org.apache.parquet.io.MessageColumnIO;
 import org.apache.parquet.io.RecordReader;
@@ -43,29 +51,28 @@ public class RowGroupReaderTask implements Callable<List<Object>> {
     @Override
     public List<Object> call() throws Exception {
         List<Object> rows = new ArrayList<>();
-        // Each thread opens its own reader to be thread-safe
         try (ParquetFileReader reader = ParquetFileReader.open(HadoopInputFile.fromPath(new Path(filePath), conf))) {
             MessageType parquetSchema = reader.getFooter().getFileMetaData().getSchema();
             PageReadStore pages = reader.readRowGroup(rowGroupIndex);
 
-            int maxBatchSize = conf.getInt("delta.kernel.default.parquet.reader.batch-size", 1024);
-            var readSupport = new io.delta.kernel.defaults.internal.parquet.ParquetFileReader.BatchReadSupport(maxBatchSize, physicalSchema);
+            GroupReadSupport readSupport = new GroupReadSupport();
+            ReadSupport.ReadContext readContext = readSupport.init(
+                    new InitContext(conf, Collections.emptyMap(), parquetSchema)
+            );
 
-            InitContext initContext = new InitContext(conf, Collections.emptyMap(), parquetSchema);
-            ReadSupport.ReadContext readContext = readSupport.init(initContext);
 
-            RecordMaterializer<Object> recordMaterializer = readSupport.prepareForRead(
+            RecordMaterializer<Group> recordMaterializer = readSupport.prepareForRead(
                     conf, Collections.emptyMap(), parquetSchema, readContext);
 
             MessageColumnIO columnIO = new ColumnIOFactory().getColumnIO(parquetSchema);
-            RecordReader<Object> recordReader = columnIO.getRecordReader(pages, recordMaterializer);
+            RecordReader<Group> recordReader = columnIO.getRecordReader(pages, recordMaterializer);
 
             for (int i = 0; i < this.rowCount; i++) {
-                Object row = recordReader.read();
+                Group row = recordReader.read();
                 if (deletionVector != null) {
                     long globalRowIndex = this.startRowIndex + i;
                     if (deletionVector.contains(globalRowIndex)) {
-                        continue; // Skip deleted row
+                        continue;
                     }
                 }
                 rows.add(row);
@@ -74,4 +81,5 @@ public class RowGroupReaderTask implements Callable<List<Object>> {
         System.out.printf("Nested thread %s finished row group %d, read %d valid rows.\n", Thread.currentThread().getName(), rowGroupIndex, rows.size());
         return rows;
     }
+
 }

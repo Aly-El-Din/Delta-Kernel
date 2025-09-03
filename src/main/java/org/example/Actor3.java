@@ -11,6 +11,7 @@ import io.delta.kernel.internal.deletionvectors.RoaringBitmapArray;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.FileStatus;
 import org.apache.hadoop.fs.Path;
+import org.apache.parquet.example.data.Group;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
@@ -82,14 +83,14 @@ public class Actor3 extends Thread {
                 startingRowIndex += rowCountInGroup;
             }
 
-            List<Object> allRowsForFile = new ArrayList<>();
+            List<Object> memory = new ArrayList<>();
             for (Future<List<Object>> future : futures) {
-                allRowsForFile.addAll(future.get());
+                memory.addAll(future.get());
             }
             executor.shutdown();
 
             System.out.printf("Thread: %s FINISHED. Total valid rows read from file %s: %d\n",
-                    currentThread().getName(), fileStatus.getPath(), allRowsForFile.size());
+                    currentThread().getName(), fileStatus.getPath(), memory.size());
 
         } catch (IOException | ExecutionException | InterruptedException e) {
             System.err.println("Error processing file in thread " + currentThread().getName());
