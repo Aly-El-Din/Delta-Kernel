@@ -38,7 +38,6 @@ public class Actor3 extends Thread {
     @Override
     public void run() {
         System.out.println("Thread: " + currentThread().getName() + " started processing file: " + fileStatus.getPath());
-        if (fileStatus == null) return;
 
         String filePath = fileStatus.getPath();
 
@@ -67,7 +66,6 @@ public class Actor3 extends Thread {
                 long rowCountInGroup = group.getRowCount();
                 Callable<List<Object>> task = new RowGroupReaderTask(
                         filePath,
-                        hadoopConfig,
                         i,
                         startingRowIndex,
                         rowCountInGroup,

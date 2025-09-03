@@ -55,11 +55,13 @@ public class Main {
             ParquetFileReader parquetFileReader = createParquetFileReader(statusesAndScanFiles.get(0).getFileStatus().getPath());
             physicalSchemaForAllParquetFiles = parquetFileReader.getFooter().getFileMetaData().getSchema();
         }
+
         for(WrapperObject obj:statusesAndScanFiles){
-            Thread fileReader = new Actor3(obj.getFileStatus(), engine, scanStateRow, Optional.empty());
+            Thread fileReader = new Actor3(obj.getFileStatus(), engine, obj.getScanFileRow(), Optional.empty());
             threads.add(fileReader);
             fileReader.start();
         }
+
         for(Thread fr:threads) {
             try{
                 fr.join();
@@ -79,7 +81,7 @@ public class Main {
         }*/
         hadoopConfig = new Configuration();
         Engine engine = DefaultEngine.create(hadoopConfig);
-        tablePath = "C:\\Users\\Cyber\\Downloads\\smallTable_dv_5000_10_50";
+        tablePath = "C:\\Users\\Cyber\\Downloads\\smallTable_5000_10_50";
 
         //1.Table initialization
         try{
@@ -104,8 +106,8 @@ public class Main {
                 //Collecting physical data iter (columnar batches) with its corresponding scan file row
                 List<WrapperObject> fileStatusesAndScanFilesRows = getFilesStatuses(scanFiles);
 
-                readParquetFilesInMemory(fileStatusesAndScanFilesRows, engine,scantStateRow);
-                System.out.println("Total number of rows read =====> "+totalNumberOfRowsRead);
+                readParquetFilesInMemory(fileStatusesAndScanFilesRows, engine, scantStateRow);
+                System.out.println("Total number of rows read =====> " + totalNumberOfRowsRead);
             }
             catch (Exception e) {
                 System.err.println("Error creating scanner");

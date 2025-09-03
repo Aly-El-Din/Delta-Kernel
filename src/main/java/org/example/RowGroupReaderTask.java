@@ -21,20 +21,19 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Callable;
 
+import static org.example.Main.hadoopConfig;
 import static org.example.Main.physicalSchemaForAllParquetFiles;
 
 
 public class RowGroupReaderTask implements Callable<List<Object>> {
     private final String filePath;
-    private final Configuration conf;
     private final int rowGroupIndex;
     private final long startRowIndex;
     private final long rowCount;
     private final RoaringBitmapArray deletionVector;
 
-    public RowGroupReaderTask(String filePath, Configuration conf, int rowGroupIndex, long startRowIndex, long rowCount, RoaringBitmapArray deletionVector) {
+    public RowGroupReaderTask(String filePath, int rowGroupIndex, long startRowIndex, long rowCount, RoaringBitmapArray deletionVector) {
         this.filePath = filePath;
-        this.conf = conf;
         this.rowGroupIndex = rowGroupIndex;
         this.startRowIndex = startRowIndex;
         this.rowCount = rowCount;
@@ -43,19 +42,19 @@ public class RowGroupReaderTask implements Callable<List<Object>> {
     @Override
     public List<Object> call() throws Exception {
         List<Object> rows = new ArrayList<>();
-        try (ParquetFileReader reader = ParquetFileReader.open(HadoopInputFile.fromPath(new Path(filePath), conf))) {
+        try (ParquetFileReader reader = ParquetFileReader.open(HadoopInputFile.fromPath(new Path(filePath), hadoopConfig))) {
             MessageType parquetSchema = physicalSchemaForAllParquetFiles;
 
             PageReadStore pages = reader.readRowGroup(rowGroupIndex);
 
             GroupReadSupport readSupport = new GroupReadSupport();
             ReadSupport.ReadContext readContext = readSupport.init(
-                    new InitContext(conf, Collections.emptyMap(), parquetSchema)
+                    new InitContext(hadoopConfig, Collections.emptyMap(), parquetSchema)
             );
 
 
             RecordMaterializer<Group> recordMaterializer = readSupport.prepareForRead(
-                    conf, Collections.emptyMap(), parquetSchema, readContext);
+                    hadoopConfig, Collections.emptyMap(), parquetSchema, readContext);
 
             MessageColumnIO columnIO = new ColumnIOFactory().getColumnIO(parquetSchema);
             RecordReader<Group> recordReader = columnIO.getRecordReader(pages, recordMaterializer);
