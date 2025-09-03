@@ -5,13 +5,10 @@ import io.delta.kernel.engine.Engine;
 import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
-import io.delta.kernel.internal.data.ScanStateRow;
 import io.delta.kernel.internal.deletionvectors.DeletionVectorUtils;
 import io.delta.kernel.internal.deletionvectors.RoaringBitmapArray;
-import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.FileStatus;
 import org.apache.hadoop.fs.Path;
-import org.apache.parquet.example.data.Group;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
@@ -23,18 +20,17 @@ import java.util.Optional;
 import java.util.concurrent.*;
 
 import static org.example.Main.hadoopConfig;
+import static org.example.Main.totalNumberOfRowsRead;
 
 public class Actor3 extends Thread {
     private final FileStatus fileStatus;
     private final Engine engine;
-    private final Row scanStateRow;
     private final Row scanFile;
     private final Optional<Predicate> predicate;
-
-    public Actor3(FileStatus fileStatus, Engine engine, Row scanStateRow, Row scanFile, Optional<Predicate> predicate) {
+    public Actor3(FileStatus fileStatus, Engine engine, Row scanFile,
+                  Optional<Predicate> predicate) {
         this.fileStatus = fileStatus;
         this.engine = engine;
-        this.scanStateRow = scanStateRow;
         this.scanFile = scanFile;
         this.predicate = predicate;
     }
@@ -44,7 +40,6 @@ public class Actor3 extends Thread {
         System.out.println("Thread: " + currentThread().getName() + " started processing file: " + fileStatus.getPath());
         if (fileStatus == null) return;
 
-        StructType physicalReadSchema = ScanStateRow.getPhysicalDataReadSchema(engine, scanStateRow);
         String filePath = fileStatus.getPath();
 
         try {
@@ -73,7 +68,6 @@ public class Actor3 extends Thread {
                 Callable<List<Object>> task = new RowGroupReaderTask(
                         filePath,
                         hadoopConfig,
-                        physicalReadSchema,
                         i,
                         startingRowIndex,
                         rowCountInGroup,
@@ -85,7 +79,9 @@ public class Actor3 extends Thread {
 
             List<Object> memory = new ArrayList<>();
             for (Future<List<Object>> future : futures) {
-                memory.addAll(future.get());
+                List<Object> rowGroup = future.get();
+                totalNumberOfRowsRead.addAndGet(rowGroup.size());
+                memory.addAll(rowGroup);
             }
             executor.shutdown();
 

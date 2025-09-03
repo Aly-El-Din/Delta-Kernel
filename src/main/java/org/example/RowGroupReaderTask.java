@@ -1,48 +1,40 @@
 package org.example;
 
 import io.delta.kernel.internal.deletionvectors.RoaringBitmapArray;
-import io.delta.kernel.types.StructType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.example.data.Group;
-import org.apache.parquet.hadoop.ParquetEmptyBlockException;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.api.InitContext;
 import org.apache.parquet.hadoop.api.ReadSupport;
 import org.apache.parquet.hadoop.example.GroupReadSupport;
-import org.apache.parquet.hadoop.metadata.BlockMetaData;
-import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
-import org.apache.parquet.hadoop.metadata.ColumnPath;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
-import org.apache.parquet.hadoop.util.counters.BenchmarkCounter;
 import org.apache.parquet.io.ColumnIOFactory;
 import org.apache.parquet.io.MessageColumnIO;
 import org.apache.parquet.io.RecordReader;
 import org.apache.parquet.io.api.RecordMaterializer;
 import org.apache.parquet.schema.MessageType;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Callable;
 
+import static org.example.Main.physicalSchemaForAllParquetFiles;
+
 
 public class RowGroupReaderTask implements Callable<List<Object>> {
     private final String filePath;
     private final Configuration conf;
-    private final StructType physicalSchema;
     private final int rowGroupIndex;
     private final long startRowIndex;
     private final long rowCount;
     private final RoaringBitmapArray deletionVector;
 
-    public RowGroupReaderTask(String filePath, Configuration conf, StructType physicalSchema, int rowGroupIndex, long startRowIndex, long rowCount, RoaringBitmapArray deletionVector) {
+    public RowGroupReaderTask(String filePath, Configuration conf, int rowGroupIndex, long startRowIndex, long rowCount, RoaringBitmapArray deletionVector) {
         this.filePath = filePath;
         this.conf = conf;
-        this.physicalSchema = physicalSchema;
         this.rowGroupIndex = rowGroupIndex;
         this.startRowIndex = startRowIndex;
         this.rowCount = rowCount;
@@ -52,7 +44,8 @@ public class RowGroupReaderTask implements Callable<List<Object>> {
     public List<Object> call() throws Exception {
         List<Object> rows = new ArrayList<>();
         try (ParquetFileReader reader = ParquetFileReader.open(HadoopInputFile.fromPath(new Path(filePath), conf))) {
-            MessageType parquetSchema = reader.getFooter().getFileMetaData().getSchema();
+            MessageType parquetSchema = physicalSchemaForAllParquetFiles;
+
             PageReadStore pages = reader.readRowGroup(rowGroupIndex);
 
             GroupReadSupport readSupport = new GroupReadSupport();
@@ -75,6 +68,8 @@ public class RowGroupReaderTask implements Callable<List<Object>> {
                         continue;
                     }
                 }
+                System.out.println("Thread " + Thread.currentThread().getId() +
+                        " read valid row: " + row.toString().replace("\n", " | "));
                 rows.add(row);
             }
         }
