@@ -50,7 +50,7 @@ public class Actor3 extends Thread {
             RoaringBitmapArray deletionVector = null;
             DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFile);
             if (dv != null) {
-                System.out.println("  - Deletion Vector found in " + currentThread().getName() + ", loading it.");
+                System.out.println("Deletion vector found in " + currentThread().getName() + ", loading it.");
                 deletionVector = DeletionVectorUtils.loadNewDvAndBitmap(engine, Main.tablePath, dv)._2;
             }
 
