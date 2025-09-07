@@ -22,9 +22,20 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class Main {
     public static Configuration hadoopConfig;
     public static String tablePath;
+    public static String outputLogFilePath;
     public static AtomicInteger totalNumberOfRowsRead = new AtomicInteger(0);
     public static MessageType physicalSchemaForAllParquetFiles;
-
+    private static StringBuilder getTableName(String tablePath) {
+        int pathLength = tablePath.length();
+        int idx = pathLength-1;
+        StringBuilder tableName = new StringBuilder();
+        while(idx>=0 && tablePath.charAt(idx)!='\\'){
+            tableName.append(tablePath.charAt(idx));
+            idx--;
+        }
+        tableName.reverse();
+        return tableName;
+    }
     public static List<WrapperObject> getFilesStatuses(CloseableIterator<FilteredColumnarBatch> scanFiles) throws IOException {
 
         List<WrapperObject> objects = new ArrayList<>();
@@ -48,7 +59,7 @@ public class Main {
         return ParquetFileReader.open(
                 HadoopInputFile.fromPath(new Path(filePath), hadoopConfig));
     }
-    public static void readParquetFilesInMemory(List<WrapperObject> statusesAndScanFiles, Engine engine, Row scanStateRow) throws IOException {
+    public static void readParquetFilesInMemory(List<WrapperObject> statusesAndScanFiles, Engine engine) throws IOException {
         List<Thread> threads = new ArrayList<>();
 
         if(statusesAndScanFiles.size()>0){
@@ -57,7 +68,7 @@ public class Main {
         }
 
         for(WrapperObject obj:statusesAndScanFiles){
-            Thread fileReader = new Actor3(obj.getFileStatus(), engine, obj.getScanFileRow(), Optional.empty());
+            Thread fileReader = new Actor3(obj.getFileStatus(), engine, obj.getScanFileRow());
             threads.add(fileReader);
             fileReader.start();
         }
@@ -75,16 +86,18 @@ public class Main {
     public static void main(String[] args) {
 
         //Get args
-        /*if(args.length < 2){
-            System.out.println("Usage: java -jar MyApp.jar <tablePath> <outputLogTxtFile>");
+        if(args.length < 2){
+            System.out.println("Usage: java -jar MyApp.jar <tablePath> <outputLogFilePath>");
             System.exit(1);
-        }*/
+        }
         hadoopConfig = new Configuration();
         Engine engine = DefaultEngine.create(hadoopConfig);
-        tablePath = "C:\\Users\\Cyber\\Downloads\\smallTable_5000_10_50";
+        tablePath = args[0];
+        outputLogFilePath = args[1];
 
         //1.Table initialization
         try{
+            long multiThreadedStartTime = System.nanoTime();
             Table table = Table.forPath(engine, tablePath);
             System.out.println("Delta table initialized=> Table class: "+table.getClass().getSimpleName());
 
@@ -97,17 +110,21 @@ public class Main {
                 Scan scan = scanBuilder.build();
                 System.out.println("Scanner created");
 
-                //scanStateRow -> snapshot-wide metadata && info for transforming physical schema to logical schema
-                Row scantStateRow = scan.getScanState(engine);
-
                 //scanFiles iterator -> file-inventory having parquet files data to be read (path, size, dv, stats, physical schema)
                 CloseableIterator<FilteredColumnarBatch> scanFiles = scan.getScanFiles(engine);
 
                 //Collecting physical data iter (columnar batches) with its corresponding scan file row
                 List<WrapperObject> fileStatusesAndScanFilesRows = getFilesStatuses(scanFiles);
 
-                readParquetFilesInMemory(fileStatusesAndScanFilesRows, engine, scantStateRow);
+                readParquetFilesInMemory(fileStatusesAndScanFilesRows, engine);
+                long multiThreadedEndTime = System.nanoTime();
                 System.out.println("Total number of rows read =====> " + totalNumberOfRowsRead);
+                long elapsedTime = (multiThreadedEndTime - multiThreadedStartTime) / 1_000_000;
+                FileWriter fileWriter = new FileWriter(outputLogFilePath, true);
+                fileWriter.write("ACTOR 3 READS | "+getTableName(tablePath)+" | IN "+elapsedTime+" SECONDS");
+                fileWriter.write("\n");
+                fileWriter.close();
+                System.out.println("Actor 3 reading Time: "+elapsedTime);
             }
             catch (Exception e) {
                 System.err.println("Error creating scanner");

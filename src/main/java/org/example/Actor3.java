@@ -2,7 +2,6 @@ package org.example;
 
 import io.delta.kernel.data.Row;
 import io.delta.kernel.engine.Engine;
-import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
 import io.delta.kernel.internal.deletionvectors.DeletionVectorUtils;
@@ -16,7 +15,6 @@ import org.apache.parquet.hadoop.util.HadoopInputFile;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.*;
 
 import static org.example.Main.hadoopConfig;
@@ -26,13 +24,10 @@ public class Actor3 extends Thread {
     private final FileStatus fileStatus;
     private final Engine engine;
     private final Row scanFile;
-    private final Optional<Predicate> predicate;
-    public Actor3(FileStatus fileStatus, Engine engine, Row scanFile,
-                  Optional<Predicate> predicate) {
+    public Actor3(FileStatus fileStatus, Engine engine, Row scanFile) {
         this.fileStatus = fileStatus;
         this.engine = engine;
         this.scanFile = scanFile;
-        this.predicate = predicate;
     }
 
     @Override
@@ -57,7 +52,7 @@ public class Actor3 extends Thread {
             if (rowGroups.isEmpty()) return;
 
             int numThreads = Math.min(rowGroups.size(), Runtime.getRuntime().availableProcessors());
-            ExecutorService executor = Executors.newFixedThreadPool(numThreads);//TODO: queue of size 10 (TBD)
+            ExecutorService executor = Executors.newFixedThreadPool(numThreads);
             List<Future<List<Object>>> futures = new ArrayList<>();
             long startingRowIndex = 0;
 

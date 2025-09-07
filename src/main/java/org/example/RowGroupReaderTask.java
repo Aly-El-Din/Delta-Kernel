@@ -1,7 +1,6 @@
 package org.example;
 
 import io.delta.kernel.internal.deletionvectors.RoaringBitmapArray;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.example.data.Group;
@@ -67,12 +66,12 @@ public class RowGroupReaderTask implements Callable<List<Object>> {
                         continue;
                     }
                 }
-                System.out.println("Thread " + Thread.currentThread().getId() +
-                        " read valid row: " + row.toString().replace("\n", " | "));
+                /*System.out.println("Thread " + Thread.currentThread().getId() +
+                        " read valid row: " + row.toString().replace("\n", " | "));*/
                 rows.add(row);
             }
         }
-        System.out.printf("Nested thread %s finished row group %d, read %d valid rows.\n", Thread.currentThread().getName(), rowGroupIndex, rows.size());
+        //System.out.printf("Nested thread %s finished row group %d, read %d valid rows.\n", Thread.currentThread().getName(), rowGroupIndex, rows.size());
         return rows;
     }
 
