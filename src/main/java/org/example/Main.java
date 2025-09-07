@@ -1,5 +1,9 @@
 package org.example;
-import io.delta.kernel.*;
+
+import io.delta.kernel.Scan;
+import io.delta.kernel.ScanBuilder;
+import io.delta.kernel.Snapshot;
+import io.delta.kernel.Table;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.defaults.engine.DefaultEngine;
@@ -7,10 +11,9 @@ import io.delta.kernel.engine.Engine;
 import io.delta.kernel.exceptions.TableNotFoundException;
 import io.delta.kernel.expressions.Column;
 import io.delta.kernel.expressions.Literal;
-import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.expressions.Predicate;
+import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.internal.data.ScanStateRow;
-import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
 import io.delta.kernel.utils.FileStatus;
@@ -20,8 +23,11 @@ import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
 import org.apache.parquet.schema.MessageType;
 
-import java.io.*;
-import java.util.*;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 
@@ -65,9 +71,6 @@ public class Main {
         }
 
         for(WrapperObject obj:statusesAndScanFiles){
-            if(predicate.isPresent()){
-                System.out.println("Creating actor3 with predicate: "+predicate.get().getName());
-            }
             Thread fileReader = new Actor3(obj.getFileStatus(), engine, obj.getScanFileRow(), predicate);
             threads.add(fileReader);
             fileReader.start();
@@ -86,13 +89,13 @@ public class Main {
     public static void main(String[] args) {
 
         //Get args
-        /*if(args.length < 2){
-            System.out.println("Usage: java -jar MyApp.jar <tablePath> <outputLogTxtFile>");
+        if(args.length < 1){
+            System.out.println("Usage: java -jar MyApp.jar <tablePath>");
             System.exit(1);
-        }*/
+        }
         hadoopConfig = new Configuration();
         engine = DefaultEngine.create(hadoopConfig);
-        tablePath = "C:\\Users\\Cyber\\Downloads\\smallTable_5000_10_50";
+        tablePath = args[0];
 
         //1.Table initialization
         try{
@@ -108,7 +111,7 @@ public class Main {
                 Predicate filter = new Predicate("GREATER_THAN",
                         Arrays.asList(
                                 new Column("id"),
-                                Literal.ofLong(10000L)
+                                Literal.ofLong(100000000L)
                         ));
 
                 Scan scan = scanBuilder.withFilter(engine, filter).build();
@@ -117,11 +120,7 @@ public class Main {
                 //scanStateRow -> snapshot-wide metadata && info for transforming physical schema to logical schema
                 Row scantStateRow = scan.getScanState(engine);
                 physicalSchemaForPredicates = ScanStateRow.getPhysicalSchema(engine, scantStateRow);
-                for(StructField field:physicalSchemaForPredicates.fields()) {
-                    System.out.println(field.getName()+" ");
-                    System.out.print(field.getDataType());
-                }
-                System.out.println("\n\n");
+
                 //scanFiles iterator -> file-inventory having parquet files data to be read (path, size, dv, stats, physical schema)
                 CloseableIterator<FilteredColumnarBatch> scanFiles = scan.getScanFiles(engine);
 

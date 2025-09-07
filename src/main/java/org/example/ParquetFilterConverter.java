@@ -7,7 +7,6 @@ import io.delta.kernel.expressions.Literal;
 import io.delta.kernel.expressions.Predicate;
 import org.apache.parquet.filter2.predicate.FilterApi;
 import org.apache.parquet.filter2.predicate.FilterPredicate;
-import org.apache.parquet.schema.MessageType;
 
 import java.util.List;
 import java.util.Optional;
