@@ -32,9 +32,9 @@ public class Actor3 extends Thread {
                             globalPhysicalDataItr.getScanFileRow(),
                             globalPhysicalDataItr.getPhysicalDataIter()
                     );
-            if (transformedData.hasNext()){
+            while (transformedData.hasNext()){
                 FilteredColumnarBatch logicalData = transformedData.next();
-                ColumnarBatch dataBatch = logicalData.getData(); //Returns unfiltered cols
+                ColumnarBatch dataBatch = logicalData.getData();
                 Optional<ColumnVector> selectionVector = logicalData.getSelectionVector();
                 int numCols = dataBatch.getSchema().length();
                 int numRows = dataBatch.getSize();
