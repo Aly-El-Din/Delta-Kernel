@@ -5,7 +5,13 @@ import io.delta.kernel.data.Row;
 import io.delta.kernel.defaults.engine.DefaultEngine;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.exceptions.TableNotFoundException;
+import io.delta.kernel.expressions.Column;
+import io.delta.kernel.expressions.Literal;
 import io.delta.kernel.internal.InternalScanFileUtils;
+import io.delta.kernel.expressions.Predicate;
+import io.delta.kernel.internal.data.ScanStateRow;
+import io.delta.kernel.types.StructField;
+import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
 import io.delta.kernel.utils.FileStatus;
 import org.apache.hadoop.conf.Configuration;
@@ -24,7 +30,8 @@ public class Main {
     public static String tablePath;
     public static AtomicInteger totalNumberOfRowsRead = new AtomicInteger(0);
     public static MessageType physicalSchemaForAllParquetFiles;
-
+    public static StructType physicalSchemaForPredicates;
+    public static Engine engine;
     public static List<WrapperObject> getFilesStatuses(CloseableIterator<FilteredColumnarBatch> scanFiles) throws IOException {
 
         List<WrapperObject> objects = new ArrayList<>();
@@ -48,7 +55,8 @@ public class Main {
         return ParquetFileReader.open(
                 HadoopInputFile.fromPath(new Path(filePath), hadoopConfig));
     }
-    public static void readParquetFilesInMemory(List<WrapperObject> statusesAndScanFiles, Engine engine, Row scanStateRow) throws IOException {
+    public static void readParquetFilesInMemory(List<WrapperObject> statusesAndScanFiles,
+                                                Engine engine, Optional<Predicate> predicate) throws IOException {
         List<Thread> threads = new ArrayList<>();
 
         if(statusesAndScanFiles.size()>0){
@@ -57,7 +65,10 @@ public class Main {
         }
 
         for(WrapperObject obj:statusesAndScanFiles){
-            Thread fileReader = new Actor3(obj.getFileStatus(), engine, obj.getScanFileRow(), Optional.empty());
+            if(predicate.isPresent()){
+                System.out.println("Creating actor3 with predicate: "+predicate.get().getName());
+            }
+            Thread fileReader = new Actor3(obj.getFileStatus(), engine, obj.getScanFileRow(), predicate);
             threads.add(fileReader);
             fileReader.start();
         }
@@ -80,7 +91,7 @@ public class Main {
             System.exit(1);
         }*/
         hadoopConfig = new Configuration();
-        Engine engine = DefaultEngine.create(hadoopConfig);
+        engine = DefaultEngine.create(hadoopConfig);
         tablePath = "C:\\Users\\Cyber\\Downloads\\smallTable_5000_10_50";
 
         //1.Table initialization
@@ -94,20 +105,32 @@ public class Main {
             //3.Scan planning
             try {
                 ScanBuilder scanBuilder = snapshot.getScanBuilder(engine);
-                Scan scan = scanBuilder.build();
+                Predicate filter = new Predicate("GREATER_THAN",
+                        Arrays.asList(
+                                new Column("id"),
+                                Literal.ofLong(10000L)
+                        ));
+
+                Scan scan = scanBuilder.withFilter(engine, filter).build();
                 System.out.println("Scanner created");
 
                 //scanStateRow -> snapshot-wide metadata && info for transforming physical schema to logical schema
                 Row scantStateRow = scan.getScanState(engine);
-
+                physicalSchemaForPredicates = ScanStateRow.getPhysicalSchema(engine, scantStateRow);
+                for(StructField field:physicalSchemaForPredicates.fields()) {
+                    System.out.println(field.getName()+" ");
+                    System.out.print(field.getDataType());
+                }
+                System.out.println("\n\n");
                 //scanFiles iterator -> file-inventory having parquet files data to be read (path, size, dv, stats, physical schema)
                 CloseableIterator<FilteredColumnarBatch> scanFiles = scan.getScanFiles(engine);
 
                 //Collecting physical data iter (columnar batches) with its corresponding scan file row
                 List<WrapperObject> fileStatusesAndScanFilesRows = getFilesStatuses(scanFiles);
 
-                readParquetFilesInMemory(fileStatusesAndScanFilesRows, engine, scantStateRow);
+                readParquetFilesInMemory(fileStatusesAndScanFilesRows, engine, Optional.of(filter));
                 System.out.println("Total number of rows read =====> " + totalNumberOfRowsRead);
+
             }
             catch (Exception e) {
                 System.err.println("Error creating scanner");

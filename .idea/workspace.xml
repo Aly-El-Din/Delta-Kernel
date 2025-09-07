@@ -10,12 +10,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="e4c4523c-3a0e-477c-96fb-a57f33f22e0f" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/RowGroupReaderTask.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/main/java/org/example/ParquetFilterConverter.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/org/example/Actor3.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/example/Actor3.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/org/example/Main.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/example/Main.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/org/example/MyParquetReader.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/example/MyParquetReader.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/org/example/ParquetSplitReaderTask.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/org/example/RowGroupReaderTask.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/example/RowGroupReaderTask.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

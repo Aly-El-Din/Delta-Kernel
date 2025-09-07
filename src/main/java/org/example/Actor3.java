@@ -8,10 +8,16 @@ import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
 import io.delta.kernel.internal.deletionvectors.DeletionVectorUtils;
 import io.delta.kernel.internal.deletionvectors.RoaringBitmapArray;
 import io.delta.kernel.utils.FileStatus;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.parquet.filter2.compat.FilterCompat;
+import org.apache.parquet.filter2.predicate.FilterPredicate;
+import org.apache.parquet.column.statistics.Statistics;
+import org.apache.parquet.format.converter.ParquetMetadataConverter;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
-import org.apache.parquet.hadoop.util.HadoopInputFile;
+import org.apache.parquet.hadoop.metadata.ColumnChunkMetaData;
+import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -45,31 +51,61 @@ public class Actor3 extends Thread {
             RoaringBitmapArray deletionVector = null;
             DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFile);
             if (dv != null) {
-                System.out.println("  - Deletion Vector found in " + currentThread().getName() + ", loading it.");
+                System.out.println("Deletion Vector found in " + currentThread().getName() + ", loading it.");
                 deletionVector = DeletionVectorUtils.loadNewDvAndBitmap(engine, Main.tablePath, dv)._2;
             }
 
             List<BlockMetaData> rowGroups;
-            try (ParquetFileReader reader = ParquetFileReader.open(HadoopInputFile.fromPath(new Path(filePath), hadoopConfig))) {
-                rowGroups = reader.getRowGroups();
+            //Configuring predicates.
+            Configuration confForReader = new Configuration(hadoopConfig);
+            ParquetMetadata footer = null;
+            if(predicate.isPresent()) {
+                System.out.println("Predicate found, converting to filter predicate:");
+                Optional<FilterPredicate> parquetPredicate = predicate.flatMap(
+                        p -> ParquetFilterConverter.toParquetFilter(p));
+                if(parquetPredicate.isPresent()) {
+                    System.out.println("Applying predicate pushdown with parquetPredicate:"+parquetPredicate.get());
+                    FilterCompat.Filter recordFilter = FilterCompat.get(parquetPredicate.get());
+                    footer = ParquetFileReader.readFooter(hadoopConfig, new Path(filePath), recordFilter);
+                }
+                else{
+                    footer = ParquetFileReader.readFooter(hadoopConfig, new Path(filePath));
+                }
             }
+
+            //If predicate exists, loading of row groups will prune what don't match.
+           /*
+            try (ParquetFileReader reader = ParquetFileReader.open(HadoopInputFile.fromPath(new Path(filePath), confForReader))) {
+                rowGroups = reader.getRowGroups();
+            }*/
+            rowGroups = footer.getBlocks();
             System.out.printf("File %s has %d row groups. Spawning nested threads.\n", fileStatus.getPath(), rowGroups.size());
             if (rowGroups.isEmpty()) return;
 
             int numThreads = Math.min(rowGroups.size(), Runtime.getRuntime().availableProcessors());
-            ExecutorService executor = Executors.newFixedThreadPool(numThreads);//TODO: queue of size 10 (TBD)
+            ExecutorService executor = Executors.newFixedThreadPool(numThreads);
             List<Future<List<Object>>> futures = new ArrayList<>();
             long startingRowIndex = 0;
 
             for (int i = 0; i < rowGroups.size(); i++) {
                 BlockMetaData group = rowGroups.get(i);
+                for(ColumnChunkMetaData col:group.getColumns()){
+                    if(col.getPath().toDotString().equals("id")){
+                        Statistics<?> stats = col.getStatistics();
+                        if(stats!=null){
+                            System.out.println("min: "+stats.genericGetMin());
+                            System.out.println("max: "+stats.genericGetMax());
+                        }
+                    }
+                }
                 long rowCountInGroup = group.getRowCount();
                 Callable<List<Object>> task = new RowGroupReaderTask(
                         filePath,
                         i,
                         startingRowIndex,
                         rowCountInGroup,
-                        deletionVector
+                        deletionVector,
+                        confForReader
                 );
                 futures.add(executor.submit(task));
                 startingRowIndex += rowCountInGroup;
@@ -83,8 +119,8 @@ public class Actor3 extends Thread {
             }
             executor.shutdown();
 
-            System.out.printf("Thread: %s FINISHED. Total valid rows read from file %s: %d\n",
-                    currentThread().getName(), fileStatus.getPath(), memory.size());
+            /*System.out.printf("Thread: %s FINISHED. Total valid rows read from file %s: %d\n",
+                    currentThread().getName(), fileStatus.getPath(), memory.size());*/
 
         } catch (IOException | ExecutionException | InterruptedException e) {
             System.err.println("Error processing file in thread " + currentThread().getName());
