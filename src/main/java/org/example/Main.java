@@ -61,14 +61,14 @@ public class Main {
     public static void main(String[] args) {
 
         //Get args
-        /*if(args.length < 2){
+        if(args.length < 2){
             System.out.println("Usage: java -jar MyApp.jar <tablePath> <outputLogTxtFile>");
             System.exit(1);
-        }*/
+        }
         Configuration hadoopConfig = new Configuration();
         Engine engine = DefaultEngine.create(hadoopConfig);
-        String tablePath = "C:\\Users\\Cyber\\Downloads\\mediumTable_1000000_100_100";
-        String outputLogFilePath = "C:\\Users\\Cyber\\Downloads\\logfile.txt";
+        String tablePath = args[0];
+        String outputLogFilePath = args[1];
         //1.Table initialization
         try{
             long multiThreadStartTime = System.nanoTime();
