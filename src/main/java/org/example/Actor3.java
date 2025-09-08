@@ -17,22 +17,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
 
-import static org.example.Main.hadoopConfig;
-import static org.example.Main.totalNumberOfRowsRead;
+import static org.example.Main.*;
 
-public class Actor3 extends Thread {
-    private final FileStatus fileStatus;
-    private final Engine engine;
-    private final Row scanFile;
-    public Actor3(FileStatus fileStatus, Engine engine, Row scanFile) {
-        this.fileStatus = fileStatus;
-        this.engine = engine;
-        this.scanFile = scanFile;
-    }
+public class Actor3 {
 
-    @Override
-    public void run() {
-        System.out.println("Thread: " + currentThread().getName() + " started processing file: " + fileStatus.getPath());
+    public void readParquetFile(FileStatus fileStatus, Row scanFile) {
+        System.out.println("Started processing file: " + fileStatus.getPath());
 
         String filePath = fileStatus.getPath();
 
@@ -40,7 +30,7 @@ public class Actor3 extends Thread {
             RoaringBitmapArray deletionVector = null;
             DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFile);
             if (dv != null) {
-                System.out.println("  - Deletion Vector found in " + currentThread().getName() + ", loading it.");
+                System.out.println("Deletion Vector found in " + filePath + ", loading it.");
                 deletionVector = DeletionVectorUtils.loadNewDvAndBitmap(engine, Main.tablePath, dv)._2;
             }
 
@@ -79,8 +69,6 @@ public class Actor3 extends Thread {
             }*/
             executor.shutdown();
             try {
-                // CRITICAL FIX: Block this Actor3 thread until all its RowGroupReaderTasks
-                // have completed, or until a timeout is reached.
                 if (!executor.awaitTermination(1, TimeUnit.HOURS)) {
                     System.err.println("Executor for file " + filePath + " did not terminate in the specified time.");
                     executor.shutdownNow();
@@ -91,11 +79,11 @@ public class Actor3 extends Thread {
                 Thread.currentThread().interrupt();
             }
 
-            System.out.printf("Thread: %s FINISHED. Rows read from file %s: \n",
-                    currentThread().getName(), fileStatus.getPath());
+            System.out.printf("Rows read from file %s: \n",
+                    filePath);
 
         } catch (IOException e) {
-            System.err.println("Error processing file in thread " + currentThread().getName());
+            System.err.println("Error processing file: " + filePath);
             e.printStackTrace();
             Thread.currentThread().interrupt();
         }

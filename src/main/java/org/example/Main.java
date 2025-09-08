@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class Main {
     public static Configuration hadoopConfig;
+    public static Engine engine;
     public static String tablePath;
     public static String outputLogFilePath;
     public static AtomicInteger totalNumberOfRowsRead = new AtomicInteger(0);
@@ -60,27 +61,14 @@ public class Main {
                 HadoopInputFile.fromPath(new Path(filePath), hadoopConfig));
     }
     public static void readParquetFilesInMemory(List<WrapperObject> statusesAndScanFiles, Engine engine) throws IOException {
-        List<Thread> threads = new ArrayList<>();
 
         if(statusesAndScanFiles.size()>0){
             ParquetFileReader parquetFileReader = createParquetFileReader(statusesAndScanFiles.get(0).getFileStatus().getPath());
             physicalSchemaForAllParquetFiles = parquetFileReader.getFooter().getFileMetaData().getSchema();
         }
-
+        Actor3 actor3 = new Actor3();
         for(WrapperObject obj:statusesAndScanFiles){
-            Thread fileReader = new Actor3(obj.getFileStatus(), engine, obj.getScanFileRow());
-            threads.add(fileReader);
-            fileReader.start();
-        }
-
-        for(Thread fr:threads) {
-            try{
-                fr.join();
-            }
-            catch (InterruptedException e) {
-                System.err.println("Thread interrupted "+e.getMessage());
-                Thread.currentThread().interrupt();
-            }
+             actor3.readParquetFile(obj.getFileStatus(), obj.getScanFileRow());
         }
     }
     public static void main(String[] args) {
@@ -91,7 +79,7 @@ public class Main {
             System.exit(1);
         }
         hadoopConfig = new Configuration();
-        Engine engine = DefaultEngine.create(hadoopConfig);
+        engine = DefaultEngine.create(hadoopConfig);
         tablePath = args[0];
         outputLogFilePath = args[1];
 
