@@ -16,15 +16,12 @@ import org.apache.hadoop.conf.Configuration;
 import static io.delta.kernel.internal.util.Utils.singletonCloseableIterator;
 
 import java.io.*;
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 
 public class Main {
+    public static AtomicInteger totalNumberOfRowsRead = new AtomicInteger(0);
     private static StringBuilder getTableName(String tablePath) {
         int pathLength = tablePath.length();
         int idx = pathLength-1;
@@ -35,54 +32,6 @@ public class Main {
         }
         tableName.reverse();
         return tableName;
-    }
-    public static Object getColumnValue(ColumnVector column, int rowIndex) {
-        if (column.isNullAt(rowIndex)) {
-            return null;
-        }
-        DataType dataType = column.getDataType();
-
-        if (dataType instanceof StringType) {
-            return column.getString(rowIndex);
-        } else if (dataType instanceof IntegerType) {
-            return column.getInt(rowIndex);
-        } else if (dataType instanceof LongType) {
-            return column.getLong(rowIndex);
-        } else if (dataType instanceof DoubleType) {
-            return column.getDouble(rowIndex);
-        } else if(dataType instanceof DecimalType) {
-            BigDecimal decimalValue = column.getDecimal(rowIndex);
-            return decimalValue.doubleValue();
-        } else if (dataType instanceof BooleanType) {
-            return column.getBoolean(rowIndex);
-        }else if (dataType instanceof TimestampType) {
-            // microseconds since epoch -> convert to Instant
-            long micros = column.getLong(rowIndex);
-            Instant instant = Instant.ofEpochSecond(
-                    micros / 1_000_000,
-                    (micros % 1_000_000) * 1000
-            );
-
-            // Use system default zone offset (or ZoneOffset.of("+03:00") if you want fixed)
-            return DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
-                    .withZone(ZoneOffset.systemDefault())  // <--- adjust here
-                    .format(instant);
-        } else if (dataType instanceof TimestampType) {
-            long micros = column.getLong(rowIndex);
-            Instant instant = Instant.ofEpochSecond(
-                    micros / 1_000_000,
-                    (micros % 1_000_000) * 1000
-            );
-            return DateTimeFormatter.ISO_OFFSET_DATE_TIME
-                    .withZone(ZoneOffset.UTC)
-                    .format(instant);
-        } else if (dataType instanceof DateType) {
-            int days = column.getInt(rowIndex);
-            LocalDate date = LocalDate.ofEpochDay(days);
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("M/d/yyyy");
-            return date.format(formatter);
-        }
-        return column.toString();
     }
     public static List<PhysicalWrapperObject> getLogicalDataAttributes(CloseableIterator<FilteredColumnarBatch> scanFiles,
                                                                        Engine engine, Row scantStateRow) throws IOException {
@@ -167,8 +116,9 @@ public class Main {
 
                 long elapsedTime = (multiThreadEndTime - multiThreadStartTime) / 1_000_000;
                 FileWriter fileWriter = new FileWriter(outputLogFilePath, true);
+                System.out.println("Total number of records read: "+totalNumberOfRowsRead);
                 fileWriter.write("\n");
-                fileWriter.write("ACTOR 3 READS | "+getTableName(tablePath)+" | IN "+elapsedTime+" SECONDS");
+                fileWriter.write("ACTOR 3 V1 READS | "+getTableName(tablePath)+" | IN "+elapsedTime+"MILLI SECONDS");
                 fileWriter.close();
                 System.out.println("Actor 3 reading Time: "+elapsedTime);
             }

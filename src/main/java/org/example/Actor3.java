@@ -36,7 +36,6 @@ public class Actor3 extends Thread {
                 FilteredColumnarBatch logicalData = transformedData.next();
                 ColumnarBatch dataBatch = logicalData.getData();
                 Optional<ColumnVector> selectionVector = logicalData.getSelectionVector();
-                int numCols = dataBatch.getSchema().length();
                 int numRows = dataBatch.getSize();
 
                 boolean dvExist = false;
@@ -51,10 +50,7 @@ public class Actor3 extends Thread {
                                 selectionVector.get().getBoolean(rowIndex));
                     }
                    if(rowSelected) {
-                        for(int colIdx = 0; colIdx<numCols; colIdx++){
-                            ColumnVector columnVector = dataBatch.getColumnVector(colIdx);
-                            getColumnValue(columnVector, rowIndex);
-                        }
+                       totalNumberOfRowsRead.addAndGet(1);
                    }
                 }
             }
