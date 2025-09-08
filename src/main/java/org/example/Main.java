@@ -121,10 +121,10 @@ public class Main {
                 System.out.println("Total number of rows read =====> " + totalNumberOfRowsRead);
                 long elapsedTime = (multiThreadedEndTime - multiThreadedStartTime) / 1_000_000;
                 FileWriter fileWriter = new FileWriter(outputLogFilePath, true);
-                fileWriter.write("ACTOR 3 READS | "+getTableName(tablePath)+" | IN "+elapsedTime+" SECONDS");
+                fileWriter.write("ACTOR 3 V2 READS | "+getTableName(tablePath)+" | IN "+elapsedTime+" MILLI SECONDS");
                 fileWriter.write("\n");
                 fileWriter.close();
-                System.out.println("Actor 3 reading Time: "+elapsedTime);
+                System.out.println("Actor 3 V2 reading Time: "+elapsedTime);
             }
             catch (Exception e) {
                 System.err.println("Error creating scanner");

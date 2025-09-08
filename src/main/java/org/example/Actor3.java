@@ -78,6 +78,18 @@ public class Actor3 extends Thread {
                 memory.addAll(rowGroup);
             }*/
             executor.shutdown();
+            try {
+                // CRITICAL FIX: Block this Actor3 thread until all its RowGroupReaderTasks
+                // have completed, or until a timeout is reached.
+                if (!executor.awaitTermination(1, TimeUnit.HOURS)) {
+                    System.err.println("Executor for file " + filePath + " did not terminate in the specified time.");
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                System.err.println("Thread was interrupted while waiting for executor to terminate.");
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
 
             System.out.printf("Thread: %s FINISHED. Rows read from file %s: \n",
                     currentThread().getName(), fileStatus.getPath());
