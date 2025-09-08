@@ -53,7 +53,7 @@ public class Actor3 extends Thread {
 
             int numThreads = Math.min(rowGroups.size(), Runtime.getRuntime().availableProcessors());
             ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-            List<Future<List<Object>>> futures = new ArrayList<>();
+            //List<Future<List<Object>>> futures = new ArrayList<>();
             long startingRowIndex = 0;
 
             for (int i = 0; i < rowGroups.size(); i++) {
@@ -66,22 +66,23 @@ public class Actor3 extends Thread {
                         rowCountInGroup,
                         deletionVector
                 );
-                futures.add(executor.submit(task));
+                //futures.add(executor.submit(task));
+                executor.submit(task);
                 startingRowIndex += rowCountInGroup;
             }
 
-            List<Object> memory = new ArrayList<>();
-            for (Future<List<Object>> future : futures) {
+            //List<Object> memory = new ArrayList<>();
+           /*for (Future<List<Object>> future : futures) {
                 List<Object> rowGroup = future.get();
                 totalNumberOfRowsRead.addAndGet(rowGroup.size());
                 memory.addAll(rowGroup);
-            }
+            }*/
             executor.shutdown();
 
-            System.out.printf("Thread: %s FINISHED. Total valid rows read from file %s: %d\n",
-                    currentThread().getName(), fileStatus.getPath(), memory.size());
+            System.out.printf("Thread: %s FINISHED. Rows read from file %s: \n",
+                    currentThread().getName(), fileStatus.getPath());
 
-        } catch (IOException | ExecutionException | InterruptedException e) {
+        } catch (IOException e) {
             System.err.println("Error processing file in thread " + currentThread().getName());
             e.printStackTrace();
             Thread.currentThread().interrupt();

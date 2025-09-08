@@ -20,8 +20,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Callable;
 
-import static org.example.Main.hadoopConfig;
-import static org.example.Main.physicalSchemaForAllParquetFiles;
+import static org.example.Main.*;
 
 
 public class RowGroupReaderTask implements Callable<List<Object>> {
@@ -66,9 +65,10 @@ public class RowGroupReaderTask implements Callable<List<Object>> {
                         continue;
                     }
                 }
+                totalNumberOfRowsRead.addAndGet(1);
                 /*System.out.println("Thread " + Thread.currentThread().getId() +
                         " read valid row: " + row.toString().replace("\n", " | "));*/
-                rows.add(row);
+                //rows.add(row);
             }
         }
         //System.out.printf("Nested thread %s finished row group %d, read %d valid rows.\n", Thread.currentThread().getName(), rowGroupIndex, rows.size());
