@@ -1,6 +1,5 @@
 package org.example;
 import io.delta.kernel.*;
-import io.delta.kernel.data.ColumnVector;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
@@ -62,14 +61,14 @@ public class Main {
     public static void main(String[] args) {
 
         //Get args
-        if(args.length < 2){
+        /*if(args.length < 2){
             System.out.println("Usage: java -jar MyApp.jar <tablePath> <outputLogTxtFile>");
             System.exit(1);
-        }
+        }*/
         Configuration hadoopConfig = new Configuration();
         Engine engine = DefaultEngine.create(hadoopConfig);
-        String tablePath = args[0];
-        String outputLogFilePath = args[1];
+        String tablePath = "C:\\Users\\Cyber\\Downloads\\mediumTable_1000000_100_100";
+        String outputLogFilePath = "C:\\Users\\Cyber\\Downloads\\logfile.txt";
         //1.Table initialization
         try{
             long multiThreadStartTime = System.nanoTime();
@@ -118,9 +117,9 @@ public class Main {
                 FileWriter fileWriter = new FileWriter(outputLogFilePath, true);
                 System.out.println("Total number of records read: "+totalNumberOfRowsRead);
                 fileWriter.write("\n");
-                fileWriter.write("ACTOR 3 V1 READS | "+getTableName(tablePath)+" | IN "+elapsedTime+"MILLI SECONDS");
+                fileWriter.write("ACTOR 3 V1 READS | "+getTableName(tablePath)+" | IN "+elapsedTime+" MILLI SECONDS");
                 fileWriter.close();
-                System.out.println("Actor 3 reading Time: "+elapsedTime);
+                System.out.println("Actor 3 V1 reading Time: "+elapsedTime);
             }
             catch (Exception e) {
                 System.err.println("Error creating scanner");

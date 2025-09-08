@@ -37,7 +37,7 @@ public class Actor3 extends Thread {
                 ColumnarBatch dataBatch = logicalData.getData();
                 Optional<ColumnVector> selectionVector = logicalData.getSelectionVector();
                 int numRows = dataBatch.getSize();
-
+                CloseableIterator<Row> rows = dataBatch.getRows();
                 boolean dvExist = false;
                 if(selectionVector.isPresent()){
                     dvExist = true;
@@ -45,11 +45,14 @@ public class Actor3 extends Thread {
                 boolean rowSelected;
                 for(int rowIndex = 0; rowIndex < numRows; rowIndex++){
                     rowSelected = true;
+                    Row row = rows.next();
+
                     if(dvExist){
                         rowSelected = (!selectionVector.get().isNullAt(rowIndex) &&
                                 selectionVector.get().getBoolean(rowIndex));
                     }
                    if(rowSelected) {
+                       //Add to memory
                        totalNumberOfRowsRead.addAndGet(1);
                    }
                 }
