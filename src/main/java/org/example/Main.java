@@ -97,14 +97,14 @@ public class Main {
     public static void main(String[] args) {
 
         //Get args
-        /*if(args.length < 2){
+        if(args.length < 2){
             System.out.println("Usage: java -jar MyApp.jar <tablePath> <outputLogFilePath>");
             System.exit(1);
-        }*/
+        }
         hadoopConfig = new Configuration();
         Engine engine = DefaultEngine.create(hadoopConfig);
-        tablePath = "C:\\Users\\Cyber\\Downloads\\mediumTable_1000000_100_100";
-        outputLogFilePath = "C:\\Users\\Cyber\\Downloads\\logfile.txt";
+        tablePath = args[0];
+        outputLogFilePath = args[1];
 
         //1.Table initialization
         try{
@@ -132,10 +132,10 @@ public class Main {
                 System.out.println("Total number of rows read =====> " + totalNumberOfRowsRead);
                 long elapsedTime = (multiThreadedEndTime - multiThreadedStartTime) / 1_000_000;
                 FileWriter fileWriter = new FileWriter(outputLogFilePath, true);
-                fileWriter.write("ACTOR 3 V2 READS | "+getTableName(tablePath)+" | IN "+elapsedTime+" MILLI SECONDS");
+                fileWriter.write("ACTOR 3 V4 READS | "+getTableName(tablePath)+" | IN "+elapsedTime+" MILLI SECONDS");
                 fileWriter.write("\n");
                 fileWriter.close();
-                System.out.println("Actor 3 V2 reading Time: "+elapsedTime);
+                System.out.println("Actor 3 V4 reading Time: "+elapsedTime);
             }
             catch (Exception e) {
                 System.err.println("Error creating scanner");
