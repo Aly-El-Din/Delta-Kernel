@@ -16,6 +16,9 @@ import org.apache.parquet.schema.MessageType;
 
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 
@@ -60,40 +63,48 @@ public class Main {
                 HadoopInputFile.fromPath(new Path(filePath), hadoopConfig));
     }
     public static void readParquetFilesInMemory(List<WrapperObject> statusesAndScanFiles, Engine engine) throws IOException {
-        List<Thread> threads = new ArrayList<>();
 
         if(statusesAndScanFiles.size()>0){
             ParquetFileReader parquetFileReader = createParquetFileReader(statusesAndScanFiles.get(0).getFileStatus().getPath());
             physicalSchemaForAllParquetFiles = parquetFileReader.getFooter().getFileMetaData().getSchema();
         }
+        int numThreads = Math.min(statusesAndScanFiles.size(), Runtime.getRuntime().availableProcessors());
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+
+        if(statusesAndScanFiles.size()>0){
+            try (ParquetFileReader parquetFileReader = createParquetFileReader(statusesAndScanFiles.get(0).
+                    getFileStatus().getPath())) {
+                physicalSchemaForAllParquetFiles = parquetFileReader.getFooter().getFileMetaData().getSchema();
+            }
+        }
 
         for(WrapperObject obj:statusesAndScanFiles){
             Thread fileReader = new Actor3(obj.getFileStatus(), engine, obj.getScanFileRow());
-            threads.add(fileReader);
-            fileReader.start();
+            executor.submit(fileReader);
         }
-
-        for(Thread fr:threads) {
-            try{
-                fr.join();
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(1, TimeUnit.HOURS)) {
+                System.err.println("File processing threads did not terminate in the specified time.");
+                executor.shutdownNow();
             }
-            catch (InterruptedException e) {
-                System.err.println("Thread interrupted "+e.getMessage());
-                Thread.currentThread().interrupt();
-            }
+        } catch (InterruptedException e) {
+            System.err.println("Main thread interrupted while waiting for file processors to finish.");
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
         }
     }
     public static void main(String[] args) {
 
         //Get args
-        if(args.length < 2){
+        /*if(args.length < 2){
             System.out.println("Usage: java -jar MyApp.jar <tablePath> <outputLogFilePath>");
             System.exit(1);
-        }
+        }*/
         hadoopConfig = new Configuration();
         Engine engine = DefaultEngine.create(hadoopConfig);
-        tablePath = args[0];
-        outputLogFilePath = args[1];
+        tablePath = "C:\\Users\\Cyber\\Downloads\\mediumTable_1000000_100_100";
+        outputLogFilePath = "C:\\Users\\Cyber\\Downloads\\logfile.txt";
 
         //1.Table initialization
         try{
