@@ -38,7 +38,7 @@ public class Actor3 {
             try (ParquetFileReader reader = ParquetFileReader.open(HadoopInputFile.fromPath(new Path(filePath), hadoopConfig))) {
                 rowGroups = reader.getRowGroups();
             }
-            System.out.printf("File %s has %d row groups. Spawning nested threads.\n", fileStatus.getPath(), rowGroups.size());
+            System.out.printf("File %s has %d row groups. Spawning threads.\n", fileStatus.getPath(), rowGroups.size());
             if (rowGroups.isEmpty()) return;
 
             int numThreads = Math.min(rowGroups.size(), Runtime.getRuntime().availableProcessors());
