@@ -53,7 +53,7 @@ public class Actor3 extends Thread {
 
             int numThreads = Math.min(rowGroups.size(), Runtime.getRuntime().availableProcessors());
             ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-            //List<Future<List<Object>>> futures = new ArrayList<>();
+
             long startingRowIndex = 0;
 
             for (int i = 0; i < rowGroups.size(); i++) {
@@ -66,21 +66,12 @@ public class Actor3 extends Thread {
                         rowCountInGroup,
                         deletionVector
                 );
-                //futures.add(executor.submit(task));
                 executor.submit(task);
                 startingRowIndex += rowCountInGroup;
             }
 
-            //List<Object> memory = new ArrayList<>();
-           /*for (Future<List<Object>> future : futures) {
-                List<Object> rowGroup = future.get();
-                totalNumberOfRowsRead.addAndGet(rowGroup.size());
-                memory.addAll(rowGroup);
-            }*/
             executor.shutdown();
             try {
-                // CRITICAL FIX: Block this Actor3 thread until all its RowGroupReaderTasks
-                // have completed, or until a timeout is reached.
                 if (!executor.awaitTermination(1, TimeUnit.HOURS)) {
                     System.err.println("Executor for file " + filePath + " did not terminate in the specified time.");
                     executor.shutdownNow();
