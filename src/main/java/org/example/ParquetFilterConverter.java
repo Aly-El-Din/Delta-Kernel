@@ -28,7 +28,7 @@ public class ParquetFilterConverter {
                 String columnName = column.getNames()[0];
 
                 switch (predicateName.toUpperCase()) {
-                    case ">": // In Kernel, the predicate name is the symbol itself.
+                    case ">":
                     case "GREATER_THAN":
                         if (literal.getValue() instanceof Long) {
                             return Optional.of(FilterApi.gt(FilterApi.longColumn(columnName), (long) literal.getValue()));
