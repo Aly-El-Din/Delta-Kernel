@@ -66,12 +66,8 @@ public class RowGroupReaderTask implements Callable<List<Object>> {
                     }
                 }
                 totalNumberOfRowsRead.addAndGet(1);
-                /*System.out.println("Thread " + Thread.currentThread().getId() +
-                        " read valid row: " + row.toString().replace("\n", " | "));*/
-                //rows.add(row);
             }
         }
-        //System.out.printf("Nested thread %s finished row group %d, read %d valid rows.\n", Thread.currentThread().getName(), rowGroupIndex, rows.size());
         return rows;
     }
 
