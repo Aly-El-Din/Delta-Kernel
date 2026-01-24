@@ -79,7 +79,7 @@ public class Actor3 extends Thread {
             }*/
             executor.shutdown();
             try {
-                // CRITICAL FIX: Block this Actor3 thread until all its RowGroupReaderTasks
+                // Block this Actor3 thread until all its RowGroupReaderTasks
                 // have completed, or until a timeout is reached.
                 if (!executor.awaitTermination(1, TimeUnit.HOURS)) {
                     System.err.println("Executor for file " + filePath + " did not terminate in the specified time.");
